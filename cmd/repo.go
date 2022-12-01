@@ -23,7 +23,7 @@ import (
 var repoCmd = &cobra.Command{
 	Use:   "repo",
 	Short: "Manipulate software repositories",
-	Long:  `Add/Remove/List/Update software repositories from which to source content`,
+	Long:  `AddRepository/Remove/List/Update software repositories from which to source content`,
 }
 
 func init() {

@@ -17,26 +17,50 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"text/tabwriter"
 
 	"github.com/perdasilva/olmcli/internal/repo"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// installPackageCmd represents the install command
-var installPackageCmd = &cobra.Command{
-	Use:   "install",
-	Short: "Installs a package",
-	Args:  cobra.MinimumNArgs(1),
+// listBundleCmd represents the list command
+var listBundleCmd = &cobra.Command{
+	Use: "bundle",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		manager, err := repo.NewManager(viper.GetString("configPath"), &logger)
 		if err != nil {
 			return err
 		}
-		return manager.Install(context.Background(), args[0])
+		defer manager.Close(context.Background())
+
+		bundles, err := manager.ListBundles(context.Background())
+		if err != nil {
+			return err
+		}
+
+		if len(bundles) == 0 {
+			fmt.Println("No bundles found...")
+			return nil
+		}
+
+		// initialize tabwriter
+		w := new(tabwriter.Writer)
+
+		// minwidth, tabwidth, padding, padchar, flags
+		w.Init(os.Stdout, 8, 8, 0, '\t', 0)
+		defer w.Flush()
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t\n", "PACKAGE", "CHANNEL", "VERSION", "REPOSITORY")
+		for _, bundle := range bundles {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t\n", bundle.PackageName, bundle.ChannelName, bundle.Version, bundle.Repository)
+		}
+		return nil
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(installPackageCmd)
+	listCmd.AddCommand(listBundleCmd)
 }

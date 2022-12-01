@@ -16,18 +16,13 @@ limitations under the License.
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
 // searchCmd represents the search command
 var searchCmd = &cobra.Command{
 	Use:   "search",
-	Short: "Search for packages",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("search called")
-	},
+	Short: "A brief description of your command",
 }
 
 func init() {

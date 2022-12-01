@@ -16,15 +16,31 @@ limitations under the License.
 package cmd
 
 import (
+	"context"
+
+	"github.com/perdasilva/olmcli/internal/repo"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
-// addCmd represents the add command
-var addCmd = &cobra.Command{
-	Use:   "add",
-	Short: "A brief description of your command",
+// addRepoCmd represents the add command
+var addRepoCmd = &cobra.Command{
+	Use:  "repo",
+	Args: cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		manager, err := repo.NewManager(viper.GetString("configPath"), &logger)
+		if err != nil {
+			return err
+		}
+
+		if err := manager.AddRepository(context.Background(), args[0]); err != nil {
+			return err
+		}
+		defer manager.Close(context.Background())
+		return nil
+	},
 }
 
 func init() {
-	rootCmd.AddCommand(addCmd)
+	addCmd.AddCommand(addRepoCmd)
 }

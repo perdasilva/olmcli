@@ -17,26 +17,51 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"text/tabwriter"
 
 	"github.com/perdasilva/olmcli/internal/repo"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// installPackageCmd represents the install command
-var installPackageCmd = &cobra.Command{
-	Use:   "install",
-	Short: "Installs a package",
-	Args:  cobra.MinimumNArgs(1),
+// searchPackageCmd represents the search command
+var searchPackageCmd = &cobra.Command{
+	Use:  "pkg",
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		manager, err := repo.NewManager(viper.GetString("configPath"), &logger)
 		if err != nil {
 			return err
 		}
-		return manager.Install(context.Background(), args[0])
+		defer manager.Close(context.Background())
+
+		pkgs, err := manager.SearchPackages(context.Background(), args[0])
+		if err != nil {
+			return err
+		}
+
+		if len(pkgs) == 0 {
+			fmt.Println("No packages found...")
+			return nil
+		}
+
+		// initialize tabwriter
+		w := new(tabwriter.Writer)
+
+		// minwidth, tabwidth, padding, padchar, flags
+		w.Init(os.Stdout, 8, 8, 0, '\t', 0)
+		defer w.Flush()
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t\n", "PACKAGE", "DEFAULT CHANNEL", "REPOSITORY")
+		for _, pkg := range pkgs {
+			fmt.Fprintf(w, "%s\t%s\t%s\t\n", pkg.Name, pkg.DefaultChannelName, pkg.Repository)
+		}
+		return nil
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(installPackageCmd)
+	searchCmd.AddCommand(searchPackageCmd)
 }

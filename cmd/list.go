@@ -16,20 +16,15 @@ limitations under the License.
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
 // listCmd represents the list command
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "Lists available software repositories",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("list called")
-	},
+	Short: "A brief description of your command",
 }
 
 func init() {
-	repoCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(listCmd)
 }
