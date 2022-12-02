@@ -1,4 +1,4 @@
-package repo
+package manager
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"github.com/operator-framework/deppy/pkg/entitysource"
 	"github.com/operator-framework/deppy/pkg/solver"
 	"github.com/perdasilva/olmcli/internal/resolution/constraints"
+	"github.com/perdasilva/olmcli/internal/store"
 )
 
 type OLMResolver struct {
@@ -19,7 +20,7 @@ func (o *OLMResolver) SolveFor(ctx context.Context, requiredPackageConstraints .
 	return o.resolver.Solve(ctx)
 }
 
-func NewOLMResolver(packageDatabase PackageDatabase) (*OLMResolver, error) {
+func NewOLMResolver(packageDatabase store.PackageDatabase) (*OLMResolver, error) {
 	olmConstraintGenerator := constraints.NewOLMConstraintGenerator()
 	resolver, err := solver.NewDeppySolver(
 		entitysource.NewGroup(NewPackageDatabaseEntitySource(packageDatabase)),

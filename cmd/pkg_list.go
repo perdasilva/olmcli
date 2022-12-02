@@ -21,7 +21,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/perdasilva/olmcli/internal/repo"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -30,11 +29,11 @@ import (
 var listPackageCmd = &cobra.Command{
 	Use: "pkg",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manager, err := repo.NewManager(viper.GetString("configPath"), &logger)
+		manager, err := manager.NewManager(viper.GetString("configPath"), &logger)
 		if err != nil {
 			return err
 		}
-		defer manager.Close(context.Background())
+		defer manager.Close()
 
 		pkgs, err := manager.ListPackages(context.Background())
 		if err != nil {

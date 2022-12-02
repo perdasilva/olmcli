@@ -21,7 +21,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/perdasilva/olmcli/internal/repo"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -30,11 +29,11 @@ import (
 var listRepoCmd = &cobra.Command{
 	Use: "repo",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manager, err := repo.NewManager(viper.GetString("configPath"), &logger)
+		manager, err := manager.NewManager(viper.GetString("configPath"), &logger)
 		if err != nil {
 			return err
 		}
-		defer manager.Close(context.Background())
+		defer manager.Close()
 
 		repos, err := manager.ListRepositories(context.Background())
 		if err != nil {
@@ -55,7 +54,7 @@ var listRepoCmd = &cobra.Command{
 
 		fmt.Fprintf(w, "%s\t%s\t\n", "REPOSITORY", "SOURCE")
 		for _, repo := range repos {
-			fmt.Fprintf(w, "%s\t%s\t\n", repo.RepositoryName(), repo.RepositorySource())
+			fmt.Fprintf(w, "%s\t%s\t\n", repo.RepositoryName, repo.RepositorySource)
 		}
 		return nil
 	},

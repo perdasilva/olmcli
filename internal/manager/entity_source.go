@@ -1,4 +1,4 @@
-package repo
+package manager
 
 import (
 	"context"
@@ -7,29 +7,30 @@ import (
 
 	"github.com/operator-framework/deppy/pkg/entitysource"
 	"github.com/operator-framework/operator-registry/alpha/property"
+	"github.com/perdasilva/olmcli/internal/store"
 	"github.com/tidwall/gjson"
 )
 
 var _ entitysource.EntitySource = &PackageDatabaseEntitySource{}
 
 type PackageDatabaseEntitySource struct {
-	packageDatabase PackageDatabase
+	packageDatabase store.PackageDatabase
 }
 
-func NewPackageDatabaseEntitySource(packageDatabase PackageDatabase) *PackageDatabaseEntitySource {
+func NewPackageDatabaseEntitySource(packageDatabase store.PackageDatabase) *PackageDatabaseEntitySource {
 	return &PackageDatabaseEntitySource{
 		packageDatabase: packageDatabase,
 	}
 }
 
-func (b *PackageDatabaseEntitySource) Get(_ context.Context, id entitysource.EntityID) *entitysource.Entity {
-	entity, _ := b.entityFromBundleId(string(id))
+func (b *PackageDatabaseEntitySource) Get(ctx context.Context, id entitysource.EntityID) *entitysource.Entity {
+	entity, _ := b.entityFromBundleId(ctx, string(id))
 	return entity
 }
 
-func (b *PackageDatabaseEntitySource) Filter(_ context.Context, filter entitysource.Predicate) (entitysource.EntityList, error) {
+func (b *PackageDatabaseEntitySource) Filter(ctx context.Context, filter entitysource.Predicate) (entitysource.EntityList, error) {
 	result := entitysource.EntityList{}
-	err := b.packageDatabase.IterateBundles(func(bundle *CachedBundle) error {
+	err := b.packageDatabase.IterateBundles(ctx, func(bundle *store.CachedBundle) error {
 		entity, err := b.bundleToDeppyEntity(bundle)
 		if err != nil {
 			return err
@@ -42,9 +43,9 @@ func (b *PackageDatabaseEntitySource) Filter(_ context.Context, filter entitysou
 	return result, err
 }
 
-func (b *PackageDatabaseEntitySource) GroupBy(_ context.Context, fn entitysource.GroupByFunction) (entitysource.EntityListMap, error) {
+func (b *PackageDatabaseEntitySource) GroupBy(ctx context.Context, fn entitysource.GroupByFunction) (entitysource.EntityListMap, error) {
 	result := entitysource.EntityListMap{}
-	err := b.packageDatabase.IterateBundles(func(bundle *CachedBundle) error {
+	err := b.packageDatabase.IterateBundles(ctx, func(bundle *store.CachedBundle) error {
 		entity, err := b.bundleToDeppyEntity(bundle)
 		if err != nil {
 			return err
@@ -58,8 +59,8 @@ func (b *PackageDatabaseEntitySource) GroupBy(_ context.Context, fn entitysource
 	return result, err
 }
 
-func (b *PackageDatabaseEntitySource) Iterate(_ context.Context, fn entitysource.IteratorFunction) error {
-	return b.packageDatabase.IterateBundles(func(bundle *CachedBundle) error {
+func (b *PackageDatabaseEntitySource) Iterate(ctx context.Context, fn entitysource.IteratorFunction) error {
+	return b.packageDatabase.IterateBundles(ctx, func(bundle *store.CachedBundle) error {
 		entity, err := b.bundleToDeppyEntity(bundle)
 		if err != nil {
 			return err
@@ -72,16 +73,16 @@ func (b *PackageDatabaseEntitySource) GetContent(_ context.Context, id entitysou
 	return nil, nil
 }
 
-func (b *PackageDatabaseEntitySource) entityFromBundleId(bundleID string) (*entitysource.Entity, error) {
-	bundle, err := b.packageDatabase.GetBundle(bundleID)
+func (b *PackageDatabaseEntitySource) entityFromBundleId(ctx context.Context, bundleID string) (*entitysource.Entity, error) {
+	bundle, err := b.packageDatabase.GetBundle(ctx, bundleID)
 	if err != nil {
 		return nil, err
 	}
 	if bundle == nil {
 		return nil, fmt.Errorf("bundle (%s) not found", bundleID)
 	}
-	packageID := GetPackageKey(bundle.Repository, bundle.PackageName)
-	pkg, err := b.packageDatabase.GetPackage(packageID)
+	packageID := store.GetPackageKey(bundle.Repository, bundle.PackageName)
+	pkg, err := b.packageDatabase.GetPackage(ctx, packageID)
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +92,9 @@ func (b *PackageDatabaseEntitySource) entityFromBundleId(bundleID string) (*enti
 	return b.bundleToDeppyEntity(bundle)
 }
 
-func (b *PackageDatabaseEntitySource) bundleToDeppyEntity(bundle *CachedBundle) (*entitysource.Entity, error) {
+func (b *PackageDatabaseEntitySource) bundleToDeppyEntity(bundle *store.CachedBundle) (*entitysource.Entity, error) {
 
-	entityId := entitysource.EntityID(bundle.ID)
+	entityId := entitysource.EntityID(bundle.ID())
 	properties := map[string]string{}
 	for _, prop := range bundle.Properties {
 		switch prop.Type {
