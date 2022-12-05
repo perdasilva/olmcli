@@ -2,11 +2,11 @@ package manager
 
 import (
 	"context"
-	"fmt"
 	"path"
+	"time"
 
 	"github.com/perdasilva/olmcli/internal/repository"
-	"github.com/perdasilva/olmcli/internal/resolution/constraints"
+	"github.com/perdasilva/olmcli/internal/resolution"
 	"github.com/perdasilva/olmcli/internal/store"
 	"github.com/sirupsen/logrus"
 )
@@ -30,7 +30,7 @@ type containerBasedManager struct {
 	store.PackageDatabase
 	logger     *logrus.Logger
 	configPath string
-	resolver   *OLMResolver
+	resolver   *resolution.OLMSolver
 }
 
 func NewManager(configPath string, logger *logrus.Logger) (Manager, error) {
@@ -43,42 +43,45 @@ func NewManager(configPath string, logger *logrus.Logger) (Manager, error) {
 		return nil, err
 	}
 
-	resolver, err := NewOLMResolver(packageDatabase)
-	if err != nil {
-		return nil, err
-	}
-
 	return &containerBasedManager{
 		PackageDatabase: packageDatabase,
 		configPath:      configPath,
 		logger:          logger,
-		resolver:        resolver,
+		resolver:        resolution.NewOLMSolver(packageDatabase),
 	}, nil
 }
 
 func (m *containerBasedManager) Install(ctx context.Context, packageName string) error {
-	requirePackage := constraints.RequirePackage{
-		PackageName:  packageName,
-		VersionRange: ">= 0.0.0",
+	start := time.Now()
+	var requiredPackages []resolution.RequiredPackage
+	for _, pkg := range []string{packageName, "datagrid", "elasticsearch-operator", "quay-operator", "odf-operator"} {
+		requiredPackage, err := resolution.NewRequiredPackage(resolution.InPkg(pkg))
+		if err != nil {
+			return err
+		}
+		requiredPackages = append(requiredPackages, *requiredPackage)
 	}
-	solution, err := m.resolver.SolveFor(ctx, requirePackage)
+	solution, err := m.resolver.Solve(ctx, requiredPackages...)
 	if err != nil {
+		m.logger.Fatal(err)
 		return err
 	}
 	for entityID, selected := range solution {
 		if selected {
-			fmt.Println(entityID)
+			m.logger.Println(entityID)
 		}
 	}
+	elapsed := time.Since(start)
+	m.logger.Printf("took %s", elapsed)
 	return nil
 }
 
 // AddRepository adds a new OLM software repository
 func (m *containerBasedManager) AddRepository(ctx context.Context, repositoryImageUrl string) error {
-	repository := repository.FromImageURL(repositoryImageUrl, m.logger)
-	if err := repository.Connect(ctx); err != nil {
+	repo := repository.FromImageURL(repositoryImageUrl, m.logger)
+	if err := repo.Connect(ctx); err != nil {
 		return err
 	}
-	defer repository.Close()
-	return m.CacheRepository(ctx, repository)
+	defer repo.Close()
+	return m.CacheRepository(ctx, repo)
 }

@@ -18,6 +18,7 @@ package cmd
 import (
 	"context"
 
+	"github.com/perdasilva/olmcli/internal/manager"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

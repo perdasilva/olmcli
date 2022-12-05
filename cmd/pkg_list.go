@@ -21,6 +21,7 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/perdasilva/olmcli/internal/manager"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
