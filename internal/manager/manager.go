@@ -15,12 +15,15 @@ import (
 type Manager interface {
 	AddRepository(ctx context.Context, repositoryImageUrl string) error
 	ListRepositories(ctx context.Context) ([]store.CachedRepository, error)
+	ListGVKs(ctx context.Context) (map[string][]store.CachedBundle, error)
+	ListBundlesForGVK(ctx context.Context, group string, version string, kind string) ([]store.CachedBundle, error)
 	SearchBundles(ctx context.Context, searchTerm string) ([]store.CachedBundle, error)
 	SearchPackages(ctx context.Context, searchTerm string) ([]store.CachedPackage, error)
 	RemoveRepository(ctx context.Context, repoName string) error
 	ListBundles(ctx context.Context) ([]store.CachedBundle, error)
 	ListPackages(ctx context.Context) ([]store.CachedPackage, error)
 	Install(ctx context.Context, packageName string) error
+	GetBundlesForPackage(ctx context.Context, packageName string, options ...store.PackageSearchOption) ([]store.CachedBundle, error)
 	Close() error
 }
 
@@ -47,11 +50,12 @@ func NewManager(configPath string, logger *logrus.Logger) (Manager, error) {
 		PackageDatabase: packageDatabase,
 		configPath:      configPath,
 		logger:          logger,
-		resolver:        resolution.NewOLMSolver(packageDatabase),
+		resolver:        resolution.NewOLMSolver(packageDatabase, logger),
 	}, nil
 }
 
 func (m *containerBasedManager) Install(ctx context.Context, packageName string) error {
+	m.logger.Printf("resolving dependencies")
 	start := time.Now()
 	var requiredPackages []resolution.RequiredPackage
 	for _, pkg := range []string{packageName, "datagrid", "elasticsearch-operator", "quay-operator", "odf-operator"} {
@@ -61,16 +65,16 @@ func (m *containerBasedManager) Install(ctx context.Context, packageName string)
 		}
 		requiredPackages = append(requiredPackages, *requiredPackage)
 	}
-	solution, err := m.resolver.Solve(ctx, requiredPackages...)
+	installables, err := m.resolver.Solve(ctx, requiredPackages...)
 	if err != nil {
 		m.logger.Fatal(err)
 		return err
 	}
-	for entityID, selected := range solution {
-		if selected {
-			m.logger.Println(entityID)
-		}
+
+	for _, installable := range installables {
+		m.logger.Printf(installable.BundleID)
 	}
+
 	elapsed := time.Since(start)
 	m.logger.Printf("took %s", elapsed)
 	return nil

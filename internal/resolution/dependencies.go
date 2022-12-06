@@ -3,6 +3,7 @@ package resolution
 import (
 	"context"
 
+	"github.com/blang/semver/v4"
 	v2 "github.com/operator-framework/deppy/pkg/v2"
 	"github.com/perdasilva/olmcli/internal/store"
 )
@@ -31,17 +32,26 @@ func (r *DependenciesVariableSource) GetVariables(ctx context.Context, source *O
 		}
 		processedEntities[head.ID()] = struct{}{}
 
-		// extract dependencies
+		// extract package and gvk dependencies
 		var dependencyEntities []OLMEntity
-		err := source.IterateBundles(ctx, func(bundle *store.CachedBundle) error {
-			entity := OLMEntity{bundle}
-			if DependencyOf(&head).Keep(&entity) {
-				dependencyEntities = append(dependencyEntities, entity)
+		for _, packageDependency := range head.PackageDependencies {
+			bundles, err := source.GetBundlesForPackage(ctx, packageDependency.PackageName, store.InVersionRange(semver.MustParseRange(packageDependency.Version)))
+			if err != nil {
+				return nil, err
 			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
+			for _, bundle := range bundles {
+				dependencyEntities = append(dependencyEntities, OLMEntity{&bundle})
+			}
+		}
+
+		for _, gvkDependency := range head.RequiredApis {
+			bundles, err := source.ListBundlesForGVK(ctx, gvkDependency.GetGroup(), gvkDependency.GetVersion(), gvkDependency.GetKind())
+			if err != nil {
+				return nil, err
+			}
+			for _, bundle := range bundles {
+				dependencyEntities = append(dependencyEntities, OLMEntity{&bundle})
+			}
 		}
 		Sort(dependencyEntities, ByChannelAndVersion)
 		r.queue = append(r.queue, dependencyEntities...)

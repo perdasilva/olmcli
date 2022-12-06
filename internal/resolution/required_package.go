@@ -10,7 +10,7 @@ import (
 	"github.com/perdasilva/olmcli/internal/store"
 )
 
-const anyValue = "anyValue"
+const anyValue = "any"
 
 type Option func(requiredPackage *RequiredPackage) error
 
@@ -76,19 +76,28 @@ func NewRequiredPackage(options ...Option) (*RequiredPackage, error) {
 }
 
 func (r *RequiredPackage) GetVariables(ctx context.Context, source *OLMEntitySource) ([]OLMVariable, error) {
-	var entities []OLMEntity
-	err := source.IterateBundles(ctx, func(bundle *store.CachedBundle) error {
-		if bundle == nil {
-			return nil
+	var searchOptions []store.PackageSearchOption
+	if r.repositoryName != anyValue {
+		searchOptions = append(searchOptions, store.InRepositories(r.repositoryName))
+	}
+	if r.versionRange != anyValue {
+		rng, err := semver.ParseRange(r.versionRange)
+		if err != nil {
+			return nil, err
 		}
-		entity := OLMEntity{bundle}
-		if And(r.predicates...).Keep(&entity) {
-			entities = append(entities, entity)
-		}
-		return nil
-	})
+		searchOptions = append(searchOptions, store.InVersionRange(rng))
+	}
+	if r.channelName != anyValue {
+		searchOptions = append(searchOptions, store.InChannel(r.channelName))
+	}
+
+	bundles, err := source.GetBundlesForPackage(ctx, r.packageName, searchOptions...)
 	if err != nil {
 		return nil, err
+	}
+	var entities []OLMEntity = make([]OLMEntity, len(bundles))
+	for index, _ := range bundles {
+		entities[index] = OLMEntity{&bundles[index]}
 	}
 	Sort(entities, ByChannelAndVersion)
 	return []OLMVariable{NewRequiredPackageVariable(r.getVariableID(), entities...)}, nil

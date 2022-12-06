@@ -36,6 +36,17 @@ var listPackageCmd = &cobra.Command{
 		}
 		defer manager.Close()
 
+		gvkMap, err := manager.ListGVKs(context.Background())
+		if err != nil {
+			return err
+		}
+		for gvk, bundles := range gvkMap {
+			fmt.Println(gvk)
+			for _, bundle := range bundles {
+				fmt.Println(bundle.BundleID)
+			}
+		}
+
 		pkgs, err := manager.ListPackages(context.Background())
 		if err != nil {
 			return err

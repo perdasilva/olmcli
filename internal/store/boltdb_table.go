@@ -45,10 +45,7 @@ func (b *BoltDBTable[E]) Get(key string) (*E, error) {
 		}
 		var err error
 		entry, err = b.decode(valueBytes)
-		if err != nil {
-			return err
-		}
-		return nil
+		return err
 	})
 	return entry, err
 }
@@ -103,7 +100,23 @@ func (b *BoltDBTable[E]) Search(fn FilterFunction[E]) ([]E, error) {
 		return nil, err
 	}
 	return entries, nil
+}
 
+func (b *BoltDBTable[E]) Seek(prefix string) ([]E, error) {
+	var entries []E
+	err := b.database.View(func(tx *bolt.Tx) error {
+		c := tx.Bucket(b.tableName).Cursor()
+		prefix := []byte(prefix)
+		for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
+			entry, err := b.decode(v)
+			if err != nil {
+				return err
+			}
+			entries = append(entries, *entry)
+		}
+		return nil
+	})
+	return entries, err
 }
 
 func (b *BoltDBTable[E]) Insert(entry *E) error {
