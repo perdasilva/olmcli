@@ -5,6 +5,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/operator-framework/operator-registry/alpha/property"
+	"github.com/perdasilva/olmcli/internal/store"
 )
 
 type Predicate[E any] interface {
@@ -30,76 +31,76 @@ func And[E any](predicates ...Predicate[E]) Predicate[E] {
 	}
 }
 
-var _ Predicate[OLMEntity] = &inRepository{}
+var _ Predicate[store.CachedBundle] = &inRepository{}
 
 type inRepository struct {
 	repositoryName string
 }
 
-func (r *inRepository) Keep(bundle *OLMEntity) bool {
+func (r *inRepository) Keep(bundle *store.CachedBundle) bool {
 	if bundle == nil {
 		return false
 	}
 	return bundle.Repository == r.repositoryName
 }
 
-func InRepository(repositoryName string) Predicate[OLMEntity] {
+func InRepository(repositoryName string) Predicate[store.CachedBundle] {
 	return &inRepository{
 		repositoryName: repositoryName,
 	}
 }
 
-var _ Predicate[OLMEntity] = &inPackage{}
+var _ Predicate[store.CachedBundle] = &inPackage{}
 
 type inPackage struct {
 	packageName string
 }
 
-func (p *inPackage) Keep(bundle *OLMEntity) bool {
+func (p *inPackage) Keep(bundle *store.CachedBundle) bool {
 	if bundle == nil {
 		return false
 	}
 	return bundle.PackageName == p.packageName
 }
 
-func InPackage(packageName string) Predicate[OLMEntity] {
+func InPackage(packageName string) Predicate[store.CachedBundle] {
 	return &inPackage{
 		packageName: packageName,
 	}
 }
 
-var _ Predicate[OLMEntity] = &inChannel{}
+var _ Predicate[store.CachedBundle] = &inChannel{}
 
 type inChannel struct {
 	channelName string
 }
 
-func (c *inChannel) Keep(bundle *OLMEntity) bool {
+func (c *inChannel) Keep(bundle *store.CachedBundle) bool {
 	if bundle == nil {
 		return false
 	}
 	return bundle.ChannelName == c.channelName
 }
 
-func InChannel(channelName string) Predicate[OLMEntity] {
+func InChannel(channelName string) Predicate[store.CachedBundle] {
 	return &inChannel{
 		channelName: channelName,
 	}
 }
 
-var _ Predicate[OLMEntity] = &inSemverRange{}
+var _ Predicate[store.CachedBundle] = &inSemverRange{}
 
 type inSemverRange struct {
 	versionRange semver.Range
 }
 
-func InSemverRange(versionRange semver.Range) Predicate[OLMEntity] {
+func InSemverRange(versionRange semver.Range) Predicate[store.CachedBundle] {
 	return &inSemverRange{
 		versionRange: versionRange,
 	}
 }
 
-func (v *inSemverRange) Keep(bundle *OLMEntity) bool {
+func (v *inSemverRange) Keep(bundle *store.CachedBundle) bool {
 	if bundle == nil {
 		return false
 	}
@@ -112,19 +113,19 @@ func (v *inSemverRange) Keep(bundle *OLMEntity) bool {
 	return v.versionRange(version)
 }
 
-var _ Predicate[OLMEntity] = &dependencyOf{}
+var _ Predicate[store.CachedBundle] = &dependencyOf{}
 
 type dependencyOf struct {
-	entity *OLMEntity
+	entity *store.CachedBundle
 }
 
-func DependencyOf(entity *OLMEntity) Predicate[OLMEntity] {
+func DependencyOf(entity *store.CachedBundle) Predicate[store.CachedBundle] {
 	return &dependencyOf{
 		entity: entity,
 	}
 }
 
-func (v *dependencyOf) Keep(bundle *OLMEntity) bool {
+func (v *dependencyOf) Keep(bundle *store.CachedBundle) bool {
 	if bundle == nil {
 		return false
 	}

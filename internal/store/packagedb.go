@@ -11,6 +11,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/boltdb/bolt"
+	v2 "github.com/operator-framework/deppy/pkg/v2"
 	"github.com/operator-framework/operator-registry/alpha/property"
 	"github.com/operator-framework/operator-registry/pkg/api"
 	"github.com/perdasilva/olmcli/internal/repository"
@@ -93,7 +94,7 @@ type CachedRepository struct {
 	RepositorySource string `json:"source"`
 }
 
-func (c CachedRepository) ID() string {
+func (c CachedRepository) EntryID() string {
 	return c.RepositoryName
 }
 
@@ -105,8 +106,12 @@ type CachedBundle struct {
 	PackageDependencies []property.Package `json:"packageDependencies"`
 }
 
-func (c CachedBundle) ID() string {
+func (c CachedBundle) EntryID() string {
 	return c.BundleID
+}
+
+func (c CachedBundle) ID() v2.EntityID {
+	return v2.EntityID(c.BundleID)
 }
 
 type CachedPackage struct {
@@ -115,7 +120,7 @@ type CachedPackage struct {
 	Repository string `json:"repository"`
 }
 
-func (c CachedPackage) ID() string {
+func (c CachedPackage) EntryID() string {
 	return c.PackageID
 }
 
@@ -125,7 +130,7 @@ type CachedGVKBundle struct {
 	GVK   string `json:"gvk"`
 }
 
-func (c CachedGVKBundle) ID() string {
+func (c CachedGVKBundle) EntryID() string {
 	return c.GVKID
 }
 

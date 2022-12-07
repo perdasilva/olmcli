@@ -32,7 +32,7 @@ func (s *simpleRepositoryContainer) Start() error {
 	if err != nil {
 		return err
 	}
-	// save container ID for clean up
+	// save container EntryID for clean up
 	s.containerID = strings.TrimSpace(string(stdout))
 	return nil
 }

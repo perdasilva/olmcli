@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/blang/semver/v4"
+	"github.com/perdasilva/olmcli/internal/store"
 )
 
 type Comparable[E any] func(e1 *E, e2 *E) bool
@@ -14,9 +15,9 @@ func Sort[E any](slice []E, fn Comparable[E]) {
 	})
 }
 
-var _ Comparable[OLMEntity] = ByChannelAndVersion
+var _ Comparable[store.CachedBundle] = ByChannelAndVersion
 
-func ByChannelAndVersion(e1 *OLMEntity, e2 *OLMEntity) bool {
+func ByChannelAndVersion(e1 *store.CachedBundle, e2 *store.CachedBundle) bool {
 	if e1.Repository != e2.Repository {
 		return e1.Repository < e2.Repository
 	}
@@ -35,8 +36,8 @@ func ByChannelAndVersion(e1 *OLMEntity, e2 *OLMEntity) bool {
 	return semver.MustParse(e1.Version).GT(semver.MustParse(e2.Version))
 }
 
-var _ Comparable[OLMEntity] = ByVersionIncreasing
+var _ Comparable[store.CachedBundle] = ByVersionIncreasing
 
-func ByVersionIncreasing(e1 *OLMEntity, e2 *OLMEntity) bool {
+func ByVersionIncreasing(e1 *store.CachedBundle, e2 *store.CachedBundle) bool {
 	return semver.MustParse(e1.Version).LT(semver.MustParse(e2.Version))
 }

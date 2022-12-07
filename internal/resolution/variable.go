@@ -2,18 +2,19 @@ package resolution
 
 import (
 	"github.com/operator-framework/deppy/pkg/sat"
+	"github.com/perdasilva/olmcli/internal/store"
 )
 
 type OLMVariable interface {
 	sat.Variable
-	OrderedEntities() []OLMEntity
+	OrderedEntities() []store.CachedBundle
 }
 
 var _ sat.Variable = &olmVariable{}
 
 type olmVariable struct {
 	id              sat.Identifier
-	orderedEntities []OLMEntity
+	orderedEntities []store.CachedBundle
 	constraints     []sat.Constraint
 }
 
@@ -25,11 +26,11 @@ func (v olmVariable) Constraints() []sat.Constraint {
 	return v.constraints
 }
 
-func (v olmVariable) OrderedEntities() []OLMEntity {
+func (v olmVariable) OrderedEntities() []store.CachedBundle {
 	return v.orderedEntities
 }
 
-func NewRequiredPackageVariable(id sat.Identifier, orderedEntities ...OLMEntity) OLMVariable {
+func NewRequiredPackageVariable(id sat.Identifier, orderedEntities ...store.CachedBundle) OLMVariable {
 	constraints := []sat.Constraint{
 		sat.Mandatory(),
 	}
@@ -43,7 +44,7 @@ func NewRequiredPackageVariable(id sat.Identifier, orderedEntities ...OLMEntity)
 	}
 }
 
-func NewUniquenessVariable(id sat.Identifier, orderedEntities ...OLMEntity) OLMVariable {
+func NewUniquenessVariable(id sat.Identifier, orderedEntities ...store.CachedBundle) OLMVariable {
 	var constraints []sat.Constraint
 	if len(orderedEntities) > 0 {
 		constraints = []sat.Constraint{
@@ -60,12 +61,12 @@ func NewUniquenessVariable(id sat.Identifier, orderedEntities ...OLMEntity) OLMV
 var _ sat.Variable = &BundleVariable{}
 
 type BundleVariable struct {
-	*OLMEntity
-	orderedDependencies []OLMEntity
+	*store.CachedBundle
+	orderedDependencies []store.CachedBundle
 	constraints         []sat.Constraint
 }
 
-func NewBundleVariable(entity *OLMEntity, orderedDependencies ...OLMEntity) OLMVariable {
+func NewBundleVariable(entity *store.CachedBundle, orderedDependencies ...store.CachedBundle) OLMVariable {
 	var constraints []sat.Constraint
 	if len(orderedDependencies) > 0 {
 		constraints = []sat.Constraint{
@@ -73,7 +74,7 @@ func NewBundleVariable(entity *OLMEntity, orderedDependencies ...OLMEntity) OLMV
 		}
 	}
 	return &BundleVariable{
-		OLMEntity:           entity,
+		CachedBundle:        entity,
 		orderedDependencies: orderedDependencies,
 		constraints:         constraints,
 	}
@@ -87,11 +88,11 @@ func (b BundleVariable) Constraints() []sat.Constraint {
 	return b.constraints
 }
 
-func (b BundleVariable) OrderedEntities() []OLMEntity {
+func (b BundleVariable) OrderedEntities() []store.CachedBundle {
 	return b.orderedDependencies
 }
 
-func toIdentifierIDs(entities []OLMEntity) []sat.Identifier {
+func toIdentifierIDs(entities []store.CachedBundle) []sat.Identifier {
 	ids := make([]sat.Identifier, len(entities))
 	for index, _ := range entities {
 		ids[index] = sat.Identifier(entities[index].BundleID)

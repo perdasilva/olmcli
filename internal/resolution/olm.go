@@ -5,17 +5,18 @@ import (
 	"time"
 
 	v2 "github.com/operator-framework/deppy/pkg/v2"
+	"github.com/perdasilva/olmcli/internal/store"
 	"github.com/sirupsen/logrus"
 )
 
-var _ v2.VariableSource[OLMEntity, OLMVariable, *OLMEntitySource] = &olmVariableSource{}
+var _ v2.VariableSource[*store.CachedBundle, OLMVariable, *OLMEntitySource] = &olmVariableSource{}
 
 type olmVariableSource struct {
-	requiredPackages []RequiredPackage
+	requiredPackages []*RequiredPackage
 	logger           *logrus.Logger
 }
 
-func OLMVariableSource(requiredPackages []RequiredPackage, logger *logrus.Logger) (v2.VariableSource[OLMEntity, OLMVariable, *OLMEntitySource], error) {
+func OLMVariableSource(requiredPackages []*RequiredPackage, logger *logrus.Logger) (v2.VariableSource[*store.CachedBundle, OLMVariable, *OLMEntitySource], error) {
 	olmVariableSource := &olmVariableSource{
 		requiredPackages: requiredPackages,
 		logger:           logger,
@@ -53,12 +54,12 @@ func (r *olmVariableSource) GetVariables(ctx context.Context, source *OLMEntityS
 	// collect bundles and dependencies
 	r.logger.Info("Collecting bundles and dependencies")
 	start = time.Now()
-	entities := make([]OLMEntity, 0, len(entitySet))
+	entities := make([]store.CachedBundle, 0, len(entitySet))
 	for _, entity := range entitySet {
 		entities = append(entities, entity)
 	}
-	dependencyVariableSource := NewDependenciesVariableSource(entities...)
-	bundleVariables, err := dependencyVariableSource.GetVariables(ctx, source)
+	bundleVariableSource := NewBundleVariableSource(entities...)
+	bundleVariables, err := bundleVariableSource.GetVariables(ctx, source)
 	if err != nil {
 		return nil, err
 	}

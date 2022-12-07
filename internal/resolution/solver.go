@@ -42,12 +42,12 @@ func NewOLMSolver(packageDB store.PackageDatabase, logger *logrus.Logger) *OLMSo
 	}
 }
 
-func (s *OLMSolver) Solve(ctx context.Context, requiredPackages ...RequiredPackage) ([]Installable, error) {
+func (s *OLMSolver) Solve(ctx context.Context, requiredPackages ...*RequiredPackage) ([]Installable, error) {
 	variableSource, err := OLMVariableSource(requiredPackages, s.logger)
 	if err != nil {
 		return nil, err
 	}
-	deppySolver, err := v2.NewDeppySolver[OLMEntity, OLMVariable, *OLMEntitySource](s.olmEntitySource, variableSource)
+	deppySolver, err := v2.NewDeppySolver[*store.CachedBundle, OLMVariable, *OLMEntitySource](s.olmEntitySource, variableSource)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (s *OLMSolver) Solve(ctx context.Context, requiredPackages ...RequiredPacka
 		dependencies := map[string]store.CachedBundle{}
 		for _, dependency := range variable.OrderedEntities() {
 			if _, ok := selectedVariables[dependency.BundleID]; ok {
-				dependencies[dependency.BundleID] = *dependency.CachedBundle
+				dependencies[dependency.BundleID] = dependency
 			}
 		}
 		installables = append(installables, Installable{

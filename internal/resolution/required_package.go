@@ -17,7 +17,7 @@ type Option func(requiredPackage *RequiredPackage) error
 func InRepo(repositoryName string) Option {
 	return func(requiredPackage *RequiredPackage) error {
 		requiredPackage.repositoryName = repositoryName
-		requiredPackage.predicates = append(requiredPackage.predicates, InRepository(repositoryName))
+		requiredPackage.searchOptions = append(requiredPackage.searchOptions, store.InRepositories(repositoryName))
 		return nil
 	}
 }
@@ -25,15 +25,7 @@ func InRepo(repositoryName string) Option {
 func InChan(channelName string) Option {
 	return func(requiredPackage *RequiredPackage) error {
 		requiredPackage.channelName = channelName
-		requiredPackage.predicates = append(requiredPackage.predicates, InChannel(channelName))
-		return nil
-	}
-}
-
-func InPkg(packageName string) Option {
-	return func(requiredPackage *RequiredPackage) error {
-		requiredPackage.packageName = packageName
-		requiredPackage.predicates = append(requiredPackage.predicates, InPackage(packageName))
+		requiredPackage.searchOptions = append(requiredPackage.searchOptions, store.InChannel(channelName))
 		return nil
 	}
 }
@@ -45,25 +37,25 @@ func InVersionRange(versionRange string) Option {
 			return err
 		}
 		requiredPackage.versionRange = versionRange
-		requiredPackage.predicates = append(requiredPackage.predicates, InSemverRange(r))
+		requiredPackage.searchOptions = append(requiredPackage.searchOptions, store.InVersionRange(r))
 		return nil
 	}
 }
 
-var _ v2.VariableSource[OLMEntity, OLMVariable, *OLMEntitySource] = &RequiredPackage{}
+var _ v2.VariableSource[*store.CachedBundle, OLMVariable, *OLMEntitySource] = &RequiredPackage{}
 
 type RequiredPackage struct {
 	repositoryName string
 	packageName    string
 	channelName    string
 	versionRange   string
-	predicates     []Predicate[OLMEntity]
+	searchOptions  []store.PackageSearchOption
 }
 
-func NewRequiredPackage(options ...Option) (*RequiredPackage, error) {
+func NewRequiredPackage(packageName string, options ...Option) (*RequiredPackage, error) {
 	requiredPackage := &RequiredPackage{
+		packageName:    packageName,
 		repositoryName: anyValue,
-		packageName:    anyValue,
 		channelName:    anyValue,
 		versionRange:   anyValue,
 	}
@@ -76,31 +68,12 @@ func NewRequiredPackage(options ...Option) (*RequiredPackage, error) {
 }
 
 func (r *RequiredPackage) GetVariables(ctx context.Context, source *OLMEntitySource) ([]OLMVariable, error) {
-	var searchOptions []store.PackageSearchOption
-	if r.repositoryName != anyValue {
-		searchOptions = append(searchOptions, store.InRepositories(r.repositoryName))
-	}
-	if r.versionRange != anyValue {
-		rng, err := semver.ParseRange(r.versionRange)
-		if err != nil {
-			return nil, err
-		}
-		searchOptions = append(searchOptions, store.InVersionRange(rng))
-	}
-	if r.channelName != anyValue {
-		searchOptions = append(searchOptions, store.InChannel(r.channelName))
-	}
-
-	bundles, err := source.GetBundlesForPackage(ctx, r.packageName, searchOptions...)
+	bundles, err := source.GetBundlesForPackage(ctx, r.packageName, r.searchOptions...)
 	if err != nil {
 		return nil, err
 	}
-	var entities []OLMEntity = make([]OLMEntity, len(bundles))
-	for index, _ := range bundles {
-		entities[index] = OLMEntity{&bundles[index]}
-	}
-	Sort(entities, ByChannelAndVersion)
-	return []OLMVariable{NewRequiredPackageVariable(r.getVariableID(), entities...)}, nil
+	Sort(bundles, ByChannelAndVersion)
+	return []OLMVariable{NewRequiredPackageVariable(r.getVariableID(), bundles...)}, nil
 }
 
 func (r *RequiredPackage) getVariableID() sat.Identifier {

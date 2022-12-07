@@ -3,7 +3,6 @@ package manager
 import (
 	"context"
 	"path"
-	"time"
 
 	"github.com/perdasilva/olmcli/internal/repository"
 	"github.com/perdasilva/olmcli/internal/resolution"
@@ -33,7 +32,7 @@ type containerBasedManager struct {
 	store.PackageDatabase
 	logger     *logrus.Logger
 	configPath string
-	resolver   *resolution.OLMSolver
+	installer  *PackageInstaller
 }
 
 func NewManager(configPath string, logger *logrus.Logger) (Manager, error) {
@@ -46,38 +45,25 @@ func NewManager(configPath string, logger *logrus.Logger) (Manager, error) {
 		return nil, err
 	}
 
+	installer, err := NewPackageInstaller(resolution.NewOLMSolver(packageDatabase, logger), logger)
+	if err != nil {
+		return nil, err
+	}
+
 	return &containerBasedManager{
 		PackageDatabase: packageDatabase,
 		configPath:      configPath,
 		logger:          logger,
-		resolver:        resolution.NewOLMSolver(packageDatabase, logger),
+		installer:       installer,
 	}, nil
 }
 
 func (m *containerBasedManager) Install(ctx context.Context, packageName string) error {
-	m.logger.Printf("resolving dependencies")
-	start := time.Now()
-	var requiredPackages []resolution.RequiredPackage
-	for _, pkg := range []string{packageName, "datagrid", "elasticsearch-operator", "quay-operator", "odf-operator"} {
-		requiredPackage, err := resolution.NewRequiredPackage(resolution.InPkg(pkg))
-		if err != nil {
-			return err
-		}
-		requiredPackages = append(requiredPackages, *requiredPackage)
-	}
-	installables, err := m.resolver.Solve(ctx, requiredPackages...)
+	packageRequired, err := resolution.NewRequiredPackage(packageName)
 	if err != nil {
-		m.logger.Fatal(err)
 		return err
 	}
-
-	for _, installable := range installables {
-		m.logger.Printf(installable.BundleID)
-	}
-
-	elapsed := time.Since(start)
-	m.logger.Printf("took %s", elapsed)
-	return nil
+	return m.installer.Install(ctx, packageRequired)
 }
 
 // AddRepository adds a new OLM software repository

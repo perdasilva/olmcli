@@ -9,7 +9,7 @@ import (
 )
 
 type IdentifiableEntry interface {
-	ID() string
+	EntryID() string
 }
 
 type IterationFunction[E IdentifiableEntry] func(*E) error
@@ -134,7 +134,7 @@ func (b *BoltDBTable[E]) InsertInTransaction(tx *bolt.Tx, entry *E) error {
 	if err != nil {
 		return err
 	}
-	return bucket.Put([]byte((*entry).ID()), valueBytes)
+	return bucket.Put([]byte((*entry).EntryID()), valueBytes)
 }
 
 func (b *BoltDBTable[E]) DeleteEntryWithKey(key string) error {
