@@ -6,6 +6,7 @@ require (
 	github.com/avast/retry-go/v4 v4.3.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/boltdb/bolt v1.3.1
+	github.com/jedib0t/go-pretty/v6 v6.4.3
 	github.com/operator-framework/deppy v0.0.0-00010101000000-000000000000
 	github.com/operator-framework/operator-registry v1.26.2
 	github.com/operator-framework/rukpak v0.11.0
@@ -46,6 +47,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
+	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -58,6 +60,7 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
+	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/spf13/afero v1.9.2 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect

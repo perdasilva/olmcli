@@ -32,7 +32,7 @@ func (r *olmVariableSource) GetVariables(ctx context.Context, source *OLMEntityS
 	var elapsed time.Duration
 
 	// collect all required package variables
-	r.logger.Info("Collecting required package variables")
+	r.logger.Debug("Collecting required package variables")
 	start = time.Now()
 	for _, reqPkg := range r.requiredPackages {
 		reqPkgVars, err := reqPkg.GetVariables(ctx, source)
@@ -49,10 +49,10 @@ func (r *olmVariableSource) GetVariables(ctx context.Context, source *OLMEntityS
 		}
 	}
 	elapsed = time.Since(start)
-	r.logger.Infof("took %s", elapsed)
+	r.logger.Debugf("took %s", elapsed)
 
 	// collect bundles and dependencies
-	r.logger.Info("Collecting bundles and dependencies")
+	r.logger.Debug("Collecting bundles and dependencies")
 	start = time.Now()
 	entities := make([]store.CachedBundle, 0, len(entitySet))
 	for _, entity := range entitySet {
@@ -72,10 +72,10 @@ func (r *olmVariableSource) GetVariables(ctx context.Context, source *OLMEntityS
 		}
 	}
 	elapsed = time.Since(start)
-	r.logger.Infof("took %s", elapsed)
+	r.logger.Debugf("took %s", elapsed)
 
 	// collect uniqueness variables
-	r.logger.Info("Applying global constraints")
+	r.logger.Debug("Applying global constraints")
 	start = time.Now()
 	uniquenessVariableSource := NewUniquenessVariableSource()
 	uniquenessVariables, err := uniquenessVariableSource.GetVariables(ctx, NewIterableEntitySource("packageSet", entitySet))
@@ -84,6 +84,6 @@ func (r *olmVariableSource) GetVariables(ctx context.Context, source *OLMEntityS
 	}
 	variables = append(variables, uniquenessVariables...)
 	elapsed = time.Since(start)
-	r.logger.Infof("took %s", elapsed)
+	r.logger.Debugf("took %s", elapsed)
 	return variables, nil
 }

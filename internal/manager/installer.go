@@ -37,25 +37,29 @@ func NewPackageInstaller(resolver *resolution.OLMSolver, logger *logrus.Logger) 
 }
 
 func (p *PackageInstaller) Install(ctx context.Context, requiredPackages ...*resolution.RequiredPackage) error {
-	p.logger.Printf("resolving dependencies")
-	start := time.Now()
-	installables, err := p.resolver.Solve(ctx, requiredPackages...)
+	installables, err := p.Resolve(ctx, requiredPackages...)
 	if err != nil {
-		p.logger.Fatal(err)
 		return err
 	}
-
-	for _, installable := range installables {
-		p.logger.Printf(installable.BundlePath)
-	}
-	elapsed := time.Since(start)
-	p.logger.Printf("took %s", elapsed)
 	for _, installable := range installables {
 		if err := p.install(ctx, &installable); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (p *PackageInstaller) Resolve(ctx context.Context, requiredPackages ...*resolution.RequiredPackage) ([]resolution.Installable, error) {
+	p.logger.Debugf("resolving dependencies")
+	start := time.Now()
+	installables, err := p.resolver.Solve(ctx, requiredPackages...)
+	if err != nil {
+		p.logger.Fatal(err)
+		return nil, err
+	}
+	elapsed := time.Since(start)
+	p.logger.Debugf("took %s", elapsed)
+	return installables, nil
 }
 
 func (p *PackageInstaller) install(ctx context.Context, installable *resolution.Installable) error {
@@ -102,7 +106,8 @@ func (p *PackageInstaller) bundleDeploymentFromInstallable(installable *resoluti
 					Source: v1alpha1.BundleSource{
 						Type: v1alpha1.SourceTypeImage,
 						Image: &v1alpha1.ImageSource{
-							Ref: installable.GetBundlePath(),
+							Ref:                 installable.GetBundlePath(),
+							ImagePullSecretName: "regcred",
 						},
 					},
 				},

@@ -17,6 +17,20 @@ func Sort[E any](slice []E, fn Comparable[E]) {
 
 var _ Comparable[store.CachedBundle] = ByChannelAndVersion
 
+func ByChannelAndVersionPreferRepository(repositoryID string) Comparable[store.CachedBundle] {
+	return func(e1 *store.CachedBundle, e2 *store.CachedBundle) bool {
+		if e1.Repository != e2.Repository {
+			if e1.Repository == repositoryID {
+				return true
+			}
+			if e2.Repository == repositoryID {
+				return false
+			}
+		}
+		return ByChannelAndVersion(e1, e2)
+	}
+}
+
 func ByChannelAndVersion(e1 *store.CachedBundle, e2 *store.CachedBundle) bool {
 	if e1.Repository != e2.Repository {
 		return e1.Repository < e2.Repository

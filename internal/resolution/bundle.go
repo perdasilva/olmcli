@@ -49,7 +49,7 @@ func (r *DependenciesVariableSource) GetVariables(ctx context.Context, source *O
 			}
 			dependencyEntities = append(dependencyEntities, bundles...)
 		}
-		Sort(dependencyEntities, ByChannelAndVersion)
+		Sort(dependencyEntities, ByChannelAndVersionPreferRepository(head.Repository))
 		r.queue = append(r.queue, dependencyEntities...)
 		variables = append(variables, NewBundleVariable(&head, dependencyEntities...))
 	}
