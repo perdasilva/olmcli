@@ -22,7 +22,7 @@ type Manager interface {
 	ListBundles(ctx context.Context) ([]store.CachedBundle, error)
 	ListPackages(ctx context.Context) ([]store.CachedPackage, error)
 	Install(ctx context.Context, packageName string) error
-	Resolve(ctx context.Context, packageName string) ([]resolution.Installable, error)
+	Resolve(ctx context.Context, packageName ...string) ([]resolution.Installable, error)
 	GetBundlesForPackage(ctx context.Context, packageName string, options ...store.PackageSearchOption) ([]store.CachedBundle, error)
 	Close() error
 }
@@ -67,12 +67,17 @@ func (m *containerBasedManager) Install(ctx context.Context, packageName string)
 	return m.installer.Install(ctx, packageRequired)
 }
 
-func (m *containerBasedManager) Resolve(ctx context.Context, packageName string) ([]resolution.Installable, error) {
-	packageRequired, err := resolution.NewRequiredPackage(packageName)
-	if err != nil {
-		return nil, err
+func (m *containerBasedManager) Resolve(ctx context.Context, packageNames ...string) ([]resolution.Installable, error) {
+	requiredPackages := make([]*resolution.RequiredPackage, len(packageNames))
+	for index, name := range packageNames {
+		packageRequired, err := resolution.NewRequiredPackage(name)
+		if err != nil {
+			return nil, err
+		}
+		requiredPackages[index] = packageRequired
 	}
-	return m.installer.Resolve(ctx, packageRequired)
+
+	return m.installer.Resolve(ctx, requiredPackages...)
 }
 
 // AddRepository adds a new OLM software repository

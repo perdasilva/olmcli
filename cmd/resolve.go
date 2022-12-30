@@ -36,7 +36,7 @@ var resolveCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		installables, err := manager.Resolve(context.Background(), args[0])
+		installables, err := manager.Resolve(context.Background(), args...)
 		if err != nil {
 			return err
 		}
