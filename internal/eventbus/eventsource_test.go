@@ -154,6 +154,10 @@ type fakeEventBus struct {
 	outputChannel chan eventbus.Event
 }
 
+func (f *fakeEventBus) AutoClosDestination(src eventbus.EventSourceID, dests ...eventbus.EventSourceID) {
+
+}
+
 func (f *fakeEventBus) Connect(eventSource eventbus.EventSource) (<-chan eventbus.Event, chan<- eventbus.Event) {
 	f.inputChannel = make(chan eventbus.Event, eventSource.IngressCapacity())
 	f.outputChannel = make(chan eventbus.Event)

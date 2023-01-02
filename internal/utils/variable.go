@@ -1,4 +1,4 @@
-package resolution
+package utils
 
 import (
 	"github.com/operator-framework/deppy/pkg/sat"
@@ -13,13 +13,13 @@ type OLMVariable interface {
 var _ sat.Variable = &olmVariable{}
 
 type olmVariable struct {
-	id              sat.Identifier
+	ID              sat.Identifier `json:"variableID"`
 	orderedEntities []store.CachedBundle
 	constraints     []sat.Constraint
 }
 
 func (v olmVariable) Identifier() sat.Identifier {
-	return v.id
+	return v.ID
 }
 
 func (v olmVariable) Constraints() []sat.Constraint {
@@ -38,7 +38,7 @@ func NewRequiredPackageVariable(id sat.Identifier, orderedEntities ...store.Cach
 		constraints = append(constraints, sat.Dependency(toIdentifierIDs(orderedEntities)...))
 	}
 	return &olmVariable{
-		id:              id,
+		ID:              id,
 		orderedEntities: orderedEntities,
 		constraints:     constraints,
 	}
@@ -52,7 +52,7 @@ func NewUniquenessVariable(id sat.Identifier, orderedEntities ...store.CachedBun
 		}
 	}
 	return &olmVariable{
-		id:              id,
+		ID:              id,
 		orderedEntities: orderedEntities,
 		constraints:     constraints,
 	}

@@ -6,17 +6,18 @@ import (
 
 	v2 "github.com/operator-framework/deppy/pkg/v2"
 	"github.com/perdasilva/olmcli/internal/store"
+	"github.com/perdasilva/olmcli/internal/utils"
 	"github.com/sirupsen/logrus"
 )
 
-var _ v2.VariableSource[*store.CachedBundle, OLMVariable, *OLMEntitySource] = &olmVariableSource{}
+var _ v2.VariableSource[*store.CachedBundle, utils.OLMVariable, *utils.OLMEntitySource] = &olmVariableSource{}
 
 type olmVariableSource struct {
 	requiredPackages []*RequiredPackage
 	logger           *logrus.Logger
 }
 
-func OLMVariableSource(requiredPackages []*RequiredPackage, logger *logrus.Logger) (v2.VariableSource[*store.CachedBundle, OLMVariable, *OLMEntitySource], error) {
+func OLMVariableSource(requiredPackages []*RequiredPackage, logger *logrus.Logger) (v2.VariableSource[*store.CachedBundle, utils.OLMVariable, *utils.OLMEntitySource], error) {
 	olmVariableSource := &olmVariableSource{
 		requiredPackages: requiredPackages,
 		logger:           logger,
@@ -24,9 +25,9 @@ func OLMVariableSource(requiredPackages []*RequiredPackage, logger *logrus.Logge
 	return olmVariableSource, nil
 }
 
-func (r *olmVariableSource) GetVariables(ctx context.Context, source *OLMEntitySource) ([]OLMVariable, error) {
-	var variables []OLMVariable
-	entitySet := OLMEntitySet{}
+func (r *olmVariableSource) GetVariables(ctx context.Context, source *utils.OLMEntitySource) ([]utils.OLMVariable, error) {
+	var variables []utils.OLMVariable
+	entitySet := utils.OLMEntitySet{}
 
 	var start time.Time
 	var elapsed time.Duration
@@ -78,7 +79,7 @@ func (r *olmVariableSource) GetVariables(ctx context.Context, source *OLMEntityS
 	r.logger.Debug("Applying global constraints")
 	start = time.Now()
 	uniquenessVariableSource := NewUniquenessVariableSource()
-	uniquenessVariables, err := uniquenessVariableSource.GetVariables(ctx, NewIterableEntitySource("packageSet", entitySet))
+	uniquenessVariables, err := uniquenessVariableSource.GetVariables(ctx, utils.NewIterableEntitySource("packageSet", entitySet))
 	if err != nil {
 		return nil, err
 	}

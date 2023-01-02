@@ -7,15 +7,16 @@ import (
 	"github.com/operator-framework/deppy/pkg/sat"
 	v2 "github.com/operator-framework/deppy/pkg/v2"
 	"github.com/perdasilva/olmcli/internal/store"
+	"github.com/perdasilva/olmcli/internal/utils"
 )
 
 type uniqueness struct{}
 
-func NewUniquenessVariableSource() v2.VariableSource[*store.CachedBundle, OLMVariable, IterableOLMEntitySource] {
+func NewUniquenessVariableSource() v2.VariableSource[*store.CachedBundle, utils.OLMVariable, utils.IterableOLMEntitySource] {
 	return &uniqueness{}
 }
 
-func (r *uniqueness) GetVariables(ctx context.Context, source IterableOLMEntitySource) ([]OLMVariable, error) {
+func (r *uniqueness) GetVariables(ctx context.Context, source utils.IterableOLMEntitySource) ([]utils.OLMVariable, error) {
 	pkgMap := map[string][]store.CachedBundle{}
 	gvkMap := map[string][]store.CachedBundle{}
 
@@ -30,14 +31,14 @@ func (r *uniqueness) GetVariables(ctx context.Context, source IterableOLMEntityS
 		return nil, err
 	}
 
-	var uniquenessVariables = make([]OLMVariable, 0, len(pkgMap)+len(gvkMap))
+	var uniquenessVariables = make([]utils.OLMVariable, 0, len(pkgMap)+len(gvkMap))
 	for pkgName, entities := range pkgMap {
-		Sort(entities, ByChannelAndVersion)
-		uniquenessVariables = append(uniquenessVariables, NewUniquenessVariable(pkgUniquenessVariableID(pkgName), entities...))
+		utils.Sort(entities, utils.ByChannelAndVersion)
+		uniquenessVariables = append(uniquenessVariables, utils.NewUniquenessVariable(pkgUniquenessVariableID(pkgName), entities...))
 	}
 	for gvk, entities := range gvkMap {
-		Sort(entities, ByChannelAndVersion)
-		uniquenessVariables = append(uniquenessVariables, NewUniquenessVariable(gvkUniquenessVariableID(gvk), entities...))
+		utils.Sort(entities, utils.ByChannelAndVersion)
+		uniquenessVariables = append(uniquenessVariables, utils.NewUniquenessVariable(gvkUniquenessVariableID(gvk), entities...))
 	}
 	return uniquenessVariables, nil
 }

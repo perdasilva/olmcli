@@ -8,9 +8,9 @@ import (
 type EventSourceID string
 type EventSourceState string
 
-type OutputEventSourceSet map[EventSourceID]struct{}
+type EventSourceSet map[EventSourceID]struct{}
 
-func (o OutputEventSourceSet) EventSourceIDs() []EventSourceID {
+func (o EventSourceSet) EventSourceIDs() []EventSourceID {
 	ids := make([]EventSourceID, 0, len(o))
 	for id, _ := range o {
 		ids = append(ids, id)
@@ -56,7 +56,8 @@ type EventProducer[I interface{}] struct {
 	reason          ErrorEvent
 	lock            sync.RWMutex
 	state           EventSourceState
-	outputs         OutputEventSourceSet
+	outputs         EventSourceSet
+	bus             EventBus
 }
 
 func NewEventProducer[I interface{}](id EventSourceID, producer Producer[I], bus EventBus) *EventProducer[I] {
@@ -68,7 +69,8 @@ func NewEventProducer[I interface{}](id EventSourceID, producer Producer[I], bus
 		done:            make(chan struct{}),
 		lock:            sync.RWMutex{},
 		state:           EventSourceStateInactive,
-		outputs:         OutputEventSourceSet{},
+		outputs:         EventSourceSet{},
+		bus:             bus,
 	}
 	source.inputChannel, source.outputChannel = bus.Connect(source)
 	return source
@@ -78,12 +80,13 @@ func (e *EventProducer[I]) Done() <-chan struct{} {
 	return e.done
 }
 
-func (e *EventProducer[I]) AddOutput(outputSources ...EventSourceID) {
+func (e *EventProducer[I]) AddOutput(outputSourceIds ...EventSourceID) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
-	for _, id := range outputSources {
+	for _, id := range outputSourceIds {
 		if _, ok := e.outputs[id]; !ok {
 			e.outputs[id] = struct{}{}
+			e.bus.AutoClosDestination(e.eventSourceID, id)
 		}
 	}
 }
@@ -120,10 +123,11 @@ func (e *EventProducer[I]) Start(ctx context.Context) {
 		return
 	}
 	e.state = EventSourceStateActive
-
+	//fmt.Printf("%s: starting\n", e.eventSourceID)
 	go func() {
 		defer func() {
 			close(e.outputChannel)
+			// fmt.Printf("%s: closing output channel\n", e.eventSourceID)
 			e.done <- struct{}{}
 		}()
 		for {
@@ -132,6 +136,7 @@ func (e *EventProducer[I]) Start(ctx context.Context) {
 				e.setState(EventSourceStateInterrupted)
 				return
 			case event, hasNext := <-e.inputChannel:
+				// fmt.Printf("%s: got event: %s\n", e.eventSourceID, event.Header().EventID())
 				if !hasNext {
 					return
 				}
@@ -144,6 +149,7 @@ func (e *EventProducer[I]) Start(ctx context.Context) {
 			default:
 				data, err := e.producer.Produce()
 				if err != nil {
+					// fmt.Printf("%s: producer err: %s\n", e.eventSourceID, err)
 					errEvent := e.eventFactory.NewErrorEvent(err)
 					errEvent.Broadcast()
 					sendEvent(ctx, e.outputChannel, errEvent)
@@ -152,6 +158,7 @@ func (e *EventProducer[I]) Start(ctx context.Context) {
 					return
 				}
 				if data == nil {
+					// fmt.Printf("%s: producer finished\n", e.eventSourceID)
 					e.setState(EventSourceStateSuccess)
 					return
 				}
@@ -161,14 +168,10 @@ func (e *EventProducer[I]) Start(ctx context.Context) {
 					dataEvent := e.eventFactory.NewDataEvent(*data)
 					outputIds := e.outputs.EventSourceIDs()
 					for i := 0; i < len(outputIds); i++ {
-						select {
-						case <-ctx.Done():
-							return
-						default:
-							evt := dataEvent.Copy()
-							evt.Route(outputIds[i])
-							sendEvent(ctx, e.outputChannel, evt)
-						}
+						evt := dataEvent.Copy()
+						evt.Route(outputIds[i])
+						//fmt.Printf("%s: producer emitting event to %s\n", e.eventSourceID, outputIds[i])
+						sendEvent(ctx, e.outputChannel, evt)
 					}
 				}()
 			}
@@ -183,6 +186,8 @@ func (e *EventProducer[I]) IngressCapacity() int {
 func (e *EventProducer[I]) EventSourceID() EventSourceID {
 	return e.eventSourceID
 }
+
+var _ EventSource = &EventConsumer[interface{}]{}
 
 type EventConsumer[I interface{}] struct {
 	eventSourceID   EventSourceID
@@ -263,6 +268,7 @@ func (e *EventConsumer[I]) Start(ctx context.Context) {
 					e.setState(EventSourceStateSuccess)
 					return
 				}
+				event.Visit(e.eventSourceID)
 				switch evt := event.(type) {
 				case ErrorEvent:
 					e.setReason(evt)
@@ -302,7 +308,8 @@ type EventProcessor[I interface{}] struct {
 	reason          ErrorEvent
 	lock            sync.RWMutex
 	state           EventSourceState
-	outputs         OutputEventSourceSet
+	outputs         EventSourceSet
+	bus             EventBus
 }
 
 func NewEventProcessor[I interface{}](id EventSourceID, processor Processor[I], bus EventBus) *EventProcessor[I] {
@@ -314,7 +321,8 @@ func NewEventProcessor[I interface{}](id EventSourceID, processor Processor[I], 
 		done:            make(chan struct{}),
 		lock:            sync.RWMutex{},
 		state:           EventSourceStateInactive,
-		outputs:         OutputEventSourceSet{},
+		outputs:         EventSourceSet{},
+		bus:             bus,
 	}
 	source.inputChannel, source.outputChannel = bus.Connect(source)
 	return source
@@ -335,12 +343,13 @@ func (e *EventProcessor[I]) State() EventSourceState {
 	return e.state
 }
 
-func (e *EventProcessor[I]) AddOutput(outputSources ...EventSourceID) {
+func (e *EventProcessor[I]) AddOutput(outputSourceIds ...EventSourceID) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
-	for _, id := range outputSources {
+	for _, id := range outputSourceIds {
 		if _, ok := e.outputs[id]; !ok {
 			e.outputs[id] = struct{}{}
+			e.bus.AutoClosDestination(e.eventSourceID, id)
 		}
 	}
 }
@@ -366,9 +375,12 @@ func (e *EventProcessor[I]) Start(ctx context.Context) {
 	}
 	e.state = EventSourceStateActive
 
+	//fmt.Printf("%s: starting\n", e.eventSourceID)
+
 	go func() {
 		defer func() {
 			close(e.outputChannel)
+			//fmt.Printf("%s: closing output channel\n", e.eventSourceID)
 			e.done <- struct{}{}
 		}()
 		for {
@@ -378,21 +390,18 @@ func (e *EventProcessor[I]) Start(ctx context.Context) {
 				return
 			case event, hasNext := <-e.inputChannel:
 				if !hasNext {
+					//fmt.Printf("%s: calling input finished hook\n", e.eventSourceID)
 					dataChannel, errChannel := e.processor.InputFinished()
 					if dataChannel == nil && errChannel == nil {
+						//fmt.Printf("%s: nothing to do...successs\n", e.eventSourceID)
 						e.setState(EventSourceStateSuccess)
 						return
 					}
 					for {
 						select {
-						case err := <-errChannel:
-							errEvent := e.eventFactory.NewErrorEvent(err)
-							sendEvent(ctx, e.outputChannel, errEvent)
-							e.setReason(errEvent)
-							e.setState(EventSourceStateFailed)
-							return
 						case data, hasNext := <-dataChannel:
 							if !hasNext {
+								//fmt.Printf("%s: ran out of data...success\n", e.eventSourceID)
 								e.setState(EventSourceStateSuccess)
 								return
 							}
@@ -402,27 +411,40 @@ func (e *EventProcessor[I]) Start(ctx context.Context) {
 								dataEvent := e.eventFactory.NewDataEvent(data)
 								outputIds := e.outputs.EventSourceIDs()
 								for i := 0; i < len(outputIds); i++ {
-									select {
-									case <-ctx.Done():
-										return
-									default:
-										evt := dataEvent.Copy()
-										evt.Route(outputIds[i])
-										sendEvent(ctx, e.outputChannel, evt)
-									}
+									evt := dataEvent.Copy()
+									evt.Route(outputIds[i])
+									//fmt.Printf("%s: emitting event to %s\n", e.eventSourceID, outputIds[i])
+									sendEvent(ctx, e.outputChannel, evt)
 								}
 							}()
+						case err, ok := <-errChannel:
+							if ok {
+								//fmt.Printf("%s: got error %s...failing\n", e.eventSourceID, err)
+								errEvent := e.eventFactory.NewErrorEvent(err)
+								errEvent.Broadcast()
+								sendEvent(ctx, e.outputChannel, errEvent)
+								e.setReason(errEvent)
+								e.setState(EventSourceStateFailed)
+							} else {
+								//fmt.Printf("%s: no errors...success\n", e.eventSourceID)
+								e.setState(EventSourceStateSuccess)
+							}
+							return
 						}
 					}
 				}
+				event.Visit(e.eventSourceID)
 				switch evt := event.(type) {
 				case ErrorEvent:
+					//fmt.Printf("%s: got error event...aborting\n", e.eventSourceID)
 					e.setReason(evt)
 					e.setState(EventSourceStateAborted)
 					return
 				case DataEvent[I]:
+					//fmt.Printf("%s: processing data\n", e.eventSourceID)
 					data, err := e.processor.Process(evt.Data())
 					if err != nil {
+						//fmt.Printf("%s: got processing data error %s\n", e.eventSourceID, err)
 						errEvent := e.eventFactory.NewErrorEvent(err)
 						sendEvent(ctx, e.outputChannel, errEvent)
 						e.setReason(errEvent)
@@ -436,14 +458,10 @@ func (e *EventProcessor[I]) Start(ctx context.Context) {
 							dataEvent := e.eventFactory.NewDataEvent(*data)
 							outputIds := e.outputs.EventSourceIDs()
 							for i := 0; i < len(outputIds); i++ {
-								select {
-								case <-ctx.Done():
-									return
-								default:
-									evt := dataEvent.Copy()
-									evt.Route(outputIds[i])
-									sendEvent(ctx, e.outputChannel, evt)
-								}
+								evt := dataEvent.Copy()
+								evt.Route(outputIds[i])
+								//fmt.Printf("%s: emitting event to %s\n", e.eventSourceID, outputIds[i])
+								sendEvent(ctx, e.outputChannel, evt)
 							}
 						}()
 					}

@@ -8,6 +8,7 @@ import (
 	"github.com/operator-framework/deppy/pkg/sat"
 	"github.com/operator-framework/deppy/pkg/v2"
 	"github.com/perdasilva/olmcli/internal/store"
+	"github.com/perdasilva/olmcli/internal/utils"
 )
 
 const anyValue = "any"
@@ -42,7 +43,7 @@ func InVersionRange(versionRange string) Option {
 	}
 }
 
-var _ v2.VariableSource[*store.CachedBundle, OLMVariable, *OLMEntitySource] = &RequiredPackage{}
+var _ v2.VariableSource[*store.CachedBundle, utils.OLMVariable, *utils.OLMEntitySource] = &RequiredPackage{}
 
 type RequiredPackage struct {
 	repositoryName string
@@ -67,13 +68,13 @@ func NewRequiredPackage(packageName string, options ...Option) (*RequiredPackage
 	return requiredPackage, nil
 }
 
-func (r *RequiredPackage) GetVariables(ctx context.Context, source *OLMEntitySource) ([]OLMVariable, error) {
+func (r *RequiredPackage) GetVariables(ctx context.Context, source *utils.OLMEntitySource) ([]utils.OLMVariable, error) {
 	bundles, err := source.GetBundlesForPackage(ctx, r.packageName, r.searchOptions...)
 	if err != nil {
 		return nil, err
 	}
-	Sort(bundles, ByChannelAndVersion)
-	return []OLMVariable{NewRequiredPackageVariable(r.getVariableID(), bundles...)}, nil
+	utils.Sort(bundles, utils.ByChannelAndVersion)
+	return []utils.OLMVariable{utils.NewRequiredPackageVariable(r.getVariableID(), bundles...)}, nil
 }
 
 func (r *RequiredPackage) getVariableID() sat.Identifier {

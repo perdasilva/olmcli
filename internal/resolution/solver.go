@@ -3,8 +3,10 @@ package resolution
 import (
 	"context"
 
-	v2 "github.com/operator-framework/deppy/pkg/v2"
+	"github.com/perdasilva/olmcli/internal/pipeline"
+	"github.com/perdasilva/olmcli/internal/pipeline/required_package"
 	"github.com/perdasilva/olmcli/internal/store"
+	"github.com/perdasilva/olmcli/internal/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -29,13 +31,13 @@ func byTopology(i1 *Installable, i2 *Installable) bool {
 }
 
 type OLMSolver struct {
-	olmEntitySource *OLMEntitySource
+	olmEntitySource *utils.OLMEntitySource
 	logger          *logrus.Logger
 }
 
 func NewOLMSolver(packageDB store.PackageDatabase, logger *logrus.Logger) *OLMSolver {
 	return &OLMSolver{
-		olmEntitySource: &OLMEntitySource{
+		olmEntitySource: &utils.OLMEntitySource{
 			packageDB,
 		},
 		logger: logger,
@@ -43,23 +45,36 @@ func NewOLMSolver(packageDB store.PackageDatabase, logger *logrus.Logger) *OLMSo
 }
 
 func (s *OLMSolver) Solve(ctx context.Context, requiredPackages ...*RequiredPackage) ([]Installable, error) {
-	variableSource, err := OLMVariableSource(requiredPackages, s.logger)
-	if err != nil {
-		return nil, err
+	//variableSource, err := OLMVariableSource(requiredPackages, s.logger)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//deppySolver, err := v2.NewDeppySolver[*store.CachedBundle, OLMVariable, *OLMEntitySource](s.olmEntitySource, variableSource)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//solution, err := deppySolver.Solve(ctx)
+	//if err != nil {
+	//	return nil, err
+	//}
+	resolutionPipeline := pipeline.NewResolutionPipeline(s.olmEntitySource)
+	var rpps []*required_package.RequiredPackageProducer
+	for _, rp := range requiredPackages {
+		rpp, err := required_package.NewRequiredPackageProducer(rp.packageName, s.olmEntitySource)
+		if err != nil {
+			return nil, err
+		}
+		rpps = append(rpps, rpp)
 	}
-	deppySolver, err := v2.NewDeppySolver[*store.CachedBundle, OLMVariable, *OLMEntitySource](s.olmEntitySource, variableSource)
-	if err != nil {
-		return nil, err
-	}
-	solution, err := deppySolver.Solve(ctx)
+	solution, err := resolutionPipeline.Execute(ctx, rpps...)
 	if err != nil {
 		return nil, err
 	}
 
-	selectedVariables := map[string]*BundleVariable{}
+	selectedVariables := map[string]*utils.BundleVariable{}
 	for _, variable := range solution {
 		switch v := variable.(type) {
-		case *BundleVariable:
+		case *utils.BundleVariable:
 			selectedVariables[v.BundleID] = v
 		}
 	}
@@ -76,6 +91,6 @@ func (s *OLMSolver) Solve(ctx context.Context, requiredPackages ...*RequiredPack
 			Dependencies: dependencies,
 		})
 	}
-	Sort(installables, byTopology)
+	utils.Sort(installables, byTopology)
 	return installables, nil
 }

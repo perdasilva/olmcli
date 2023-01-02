@@ -6,9 +6,10 @@ import (
 	"github.com/blang/semver/v4"
 	v2 "github.com/operator-framework/deppy/pkg/v2"
 	"github.com/perdasilva/olmcli/internal/store"
+	"github.com/perdasilva/olmcli/internal/utils"
 )
 
-var _ v2.VariableSource[*store.CachedBundle, OLMVariable, *OLMEntitySource] = &DependenciesVariableSource{}
+var _ v2.VariableSource[*store.CachedBundle, utils.OLMVariable, *utils.OLMEntitySource] = &DependenciesVariableSource{}
 
 type DependenciesVariableSource struct {
 	queue []store.CachedBundle
@@ -20,9 +21,9 @@ func NewBundleVariableSource(seedEntities ...store.CachedBundle) *DependenciesVa
 	}
 }
 
-func (r *DependenciesVariableSource) GetVariables(ctx context.Context, source *OLMEntitySource) ([]OLMVariable, error) {
+func (r *DependenciesVariableSource) GetVariables(ctx context.Context, source *utils.OLMEntitySource) ([]utils.OLMVariable, error) {
 	processedEntities := map[v2.EntityID]struct{}{}
-	var variables []OLMVariable
+	var variables []utils.OLMVariable
 
 	for len(r.queue) > 0 {
 		var head store.CachedBundle
@@ -49,9 +50,9 @@ func (r *DependenciesVariableSource) GetVariables(ctx context.Context, source *O
 			}
 			dependencyEntities = append(dependencyEntities, bundles...)
 		}
-		Sort(dependencyEntities, ByChannelAndVersionPreferRepository(head.Repository))
+		utils.Sort(dependencyEntities, utils.ByChannelAndVersionPreferRepository(head.Repository))
 		r.queue = append(r.queue, dependencyEntities...)
-		variables = append(variables, NewBundleVariable(&head, dependencyEntities...))
+		variables = append(variables, utils.NewBundleVariable(&head, dependencyEntities...))
 	}
 	return variables, nil
 }
