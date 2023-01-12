@@ -5,29 +5,32 @@ import (
 	"testing"
 	"time"
 
-	"github.com/perdasilva/olmcli/internal/eventbus"
+	"github.com/perdasilva/olmcli/internal/pipeline"
+	"github.com/perdasilva/olmcli/internal/pipeline/event"
+	"github.com/perdasilva/olmcli/internal/pipeline/eventbus"
+	"github.com/perdasilva/olmcli/internal/pipeline/eventbus/eventrouter"
 	"github.com/stretchr/testify/assert"
 )
 
-var _ eventbus.EventSource = &dummyEventSource{}
+var _ pipeline.EventSource = &dummyEventSource{}
 
 type dummyEventSource struct {
 	ingressCapacity int
-	eventSourceID   eventbus.EventSourceID
-	eventFactory    eventbus.EventFactory[int]
-	in              <-chan eventbus.Event
-	out             chan<- eventbus.Event
+	eventSourceID   pipeline.EventSourceID
+	eventFactory    pipeline.EventFactory[int]
+	in              <-chan pipeline.Event
+	out             chan<- pipeline.Event
 }
 
-func newEventSource(eventSourceID eventbus.EventSourceID, ingressCapacity int) *dummyEventSource {
+func newEventSource(eventSourceID pipeline.EventSourceID, ingressCapacity int) *dummyEventSource {
 	return &dummyEventSource{
 		eventSourceID:   eventSourceID,
 		ingressCapacity: ingressCapacity,
-		eventFactory:    eventbus.NewEventFactory[int](eventSourceID),
+		eventFactory:    event.NewEventFactory[int](eventSourceID),
 	}
 }
 
-func (d *dummyEventSource) Connect(bus eventbus.EventBus) *dummyEventSource {
+func (d *dummyEventSource) Connect(bus pipeline.EventBus) *dummyEventSource {
 	d.in, d.out = bus.Connect(d)
 	return d
 }
@@ -36,7 +39,7 @@ func (d *dummyEventSource) IngressCapacity() int {
 	return d.ingressCapacity
 }
 
-func (d *dummyEventSource) EventSourceID() eventbus.EventSourceID {
+func (d *dummyEventSource) EventSourceID() pipeline.EventSourceID {
 	return d.eventSourceID
 }
 
@@ -52,8 +55,8 @@ func TestEventBus_routes(t *testing.T) {
 	receiver := newEventSource("receiver", 0).Connect(bus)
 
 	// sender
-	sentEventCh := make(chan eventbus.Event)
-	go func(sentEventCh chan<- eventbus.Event) {
+	sentEventCh := make(chan pipeline.Event)
+	go func(sentEventCh chan<- pipeline.Event) {
 		event := sender.eventFactory.NewDataEvent(1)
 		event.Route("receiver")
 		for {
@@ -69,14 +72,14 @@ func TestEventBus_routes(t *testing.T) {
 	}(sentEventCh)
 
 	// receiver
-	receivedEventCh := make(chan eventbus.Event)
-	go func(receivedEventCh chan<- eventbus.Event) {
+	receivedEventCh := make(chan pipeline.Event)
+	go func(receivedEventCh chan<- pipeline.Event) {
 		for {
 			select {
 			case <-testCtx.Done():
 				return
-			case event := <-receiver.in:
-				receivedEventCh <- event
+			case evt := <-receiver.in:
+				receivedEventCh <- evt
 				close(receiver.out)
 				return
 			}
@@ -98,16 +101,16 @@ func TestEventBus_broadcasts(t *testing.T) {
 	nodeThree := newEventSource("nodeThree", 0).Connect(bus)
 
 	// sender
-	sentEventCh := make(chan eventbus.Event)
-	go func(sentEventCh chan<- eventbus.Event) {
-		event := sender.eventFactory.NewDataEvent(1)
-		event.Broadcast()
+	sentEventCh := make(chan pipeline.Event)
+	go func(sentEventCh chan<- pipeline.Event) {
+		evt := sender.eventFactory.NewDataEvent(1)
+		evt.Broadcast()
 		for {
 			select {
 			case <-testCtx.Done():
 				return
-			case sender.out <- event:
-				sentEventCh <- event
+			case sender.out <- evt:
+				sentEventCh <- evt
 				close(sender.out)
 				<-sender.in
 				return
@@ -116,15 +119,15 @@ func TestEventBus_broadcasts(t *testing.T) {
 	}(sentEventCh)
 
 	// receivers
-	receivedEventCh := make(chan eventbus.Event, 3)
+	receivedEventCh := make(chan pipeline.Event, 3)
 	for _, node := range []*dummyEventSource{nodeOne, nodeTwo, nodeThree} {
-		go func(node *dummyEventSource, receivedEventCh chan<- eventbus.Event) {
+		go func(node *dummyEventSource, receivedEventCh chan<- pipeline.Event) {
 			for {
 				select {
 				case <-testCtx.Done():
 					return
-				case event := <-node.in:
-					receivedEventCh <- event
+				case evt := <-node.in:
+					receivedEventCh <- evt
 					close(node.out)
 					return
 				}
@@ -151,9 +154,9 @@ func TestEventBus_cancels(t *testing.T) {
 	// sender
 	go func() {
 		for i := 0; i < 20; i++ {
-			event := sender.eventFactory.NewDataEvent(1)
-			event.Route("receiver")
-			sender.out <- event
+			evt := sender.eventFactory.NewDataEvent(1)
+			evt.Route("receiver")
+			sender.out <- evt
 		}
 		close(sender.out)
 	}()
@@ -182,8 +185,8 @@ func TestEventBus_cancels(t *testing.T) {
 }
 
 func TestEventBus_debugs(t *testing.T) {
-	debugChannel := make(chan eventbus.Event)
-	bus := eventbus.NewEventBus(context.Background(), eventbus.WithDebugChannel(debugChannel))
+	debugChannel := make(chan pipeline.Event)
+	bus := eventbus.NewEventBus(context.Background(), eventrouter.WithDebugChannel(debugChannel))
 	sender := newEventSource("sender", 0).Connect(bus)
 	receiver := newEventSource("receiver", 0).Connect(bus)
 	numMessages := 5
@@ -191,9 +194,9 @@ func TestEventBus_debugs(t *testing.T) {
 	// sender
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			event := sender.eventFactory.NewDataEvent(i)
-			event.Route("receiver")
-			sender.out <- event
+			evt := sender.eventFactory.NewDataEvent(i)
+			evt.Route("receiver")
+			sender.out <- evt
 		}
 		close(sender.out)
 	}()
@@ -207,15 +210,15 @@ func TestEventBus_debugs(t *testing.T) {
 		close(receiver.out)
 	}()
 
-	var events []eventbus.Event
+	var events []pipeline.Event
 	func() {
 		for {
 			select {
-			case event, hasNext := <-debugChannel:
+			case evt, hasNext := <-debugChannel:
 				if !hasNext {
 					return
 				}
-				events = append(events, event)
+				events = append(events, evt)
 			}
 		}
 	}()

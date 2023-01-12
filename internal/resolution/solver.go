@@ -3,8 +3,8 @@ package resolution
 import (
 	"context"
 
-	"github.com/perdasilva/olmcli/internal/pipeline"
-	"github.com/perdasilva/olmcli/internal/pipeline/required_package"
+	"github.com/perdasilva/olmcli/internal/olm_pipeline"
+	"github.com/perdasilva/olmcli/internal/olm_pipeline/required_package"
 	"github.com/perdasilva/olmcli/internal/store"
 	"github.com/perdasilva/olmcli/internal/utils"
 	"github.com/sirupsen/logrus"
@@ -57,7 +57,7 @@ func (s *OLMSolver) Solve(ctx context.Context, requiredPackages ...*RequiredPack
 	//if err != nil {
 	//	return nil, err
 	//}
-	resolutionPipeline := pipeline.NewResolutionPipeline(s.olmEntitySource)
+	resolutionPipeline := olm_pipeline.NewResolutionPipeline(s.olmEntitySource)
 	var rpps []*required_package.RequiredPackageProducer
 	for _, rp := range requiredPackages {
 		rpp, err := required_package.NewRequiredPackageProducer(rp.packageName, s.olmEntitySource)

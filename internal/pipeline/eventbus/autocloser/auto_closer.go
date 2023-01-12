@@ -1,8 +1,11 @@
-package eventbus
+package autocloser
 
 import (
 	"context"
 	"sync"
+
+	"github.com/perdasilva/olmcli/internal/pipeline"
+	eventrouter2 "github.com/perdasilva/olmcli/internal/pipeline/eventbus/eventrouter"
 )
 
 // autoClose tracks the event sources that provide input into a destination
@@ -10,8 +13,8 @@ import (
 // once an autoClose has run out of active input sources the input channel
 // for the destination is closed signalling end of input
 type autoClose struct {
-	eventSourceID EventSourceID
-	sourceSet     map[EventSourceID]struct{}
+	eventSourceID pipeline.EventSourceID
+	sourceSet     map[pipeline.EventSourceID]struct{}
 	lock          sync.RWMutex
 }
 
@@ -22,7 +25,7 @@ func (a *autoClose) isOutOfSources() bool {
 }
 
 // popSource removes an input source from the tracking set
-func (a *autoClose) popSource(eventSourceID EventSourceID) bool {
+func (a *autoClose) popSource(eventSourceID pipeline.EventSourceID) bool {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 	if _, ok := a.sourceSet[eventSourceID]; ok {
@@ -33,52 +36,52 @@ func (a *autoClose) popSource(eventSourceID EventSourceID) bool {
 }
 
 // pushSource adds an input source to the tracking set
-func (a *autoClose) pushSource(eventSourceID EventSourceID) {
+func (a *autoClose) pushSource(eventSourceID pipeline.EventSourceID) {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 	a.sourceSet[eventSourceID] = struct{}{}
 }
 
 // autoCloseTable tracks event sources with an active autoClose
-type autoCloseTable map[EventSourceID]*autoClose
+type autoCloseTable map[pipeline.EventSourceID]*autoClose
 
-// autoCloser manages the autoCloseTable
-type autoCloser struct {
+// AutoCloser manages the autoCloseTable
+type AutoCloser struct {
 	autoCloseTable   autoCloseTable
-	autoCloseSources map[EventSourceID]struct{}
-	router           *router
+	autoCloseSources map[pipeline.EventSourceID]struct{}
+	router           *eventrouter2.Router
 	lock             sync.RWMutex
 }
 
-func newAutoCloser(router *router) *autoCloser {
-	return &autoCloser{
+func NewAutoCloser(router *eventrouter2.Router) *AutoCloser {
+	return &AutoCloser{
 		autoCloseTable:   autoCloseTable{},
-		autoCloseSources: map[EventSourceID]struct{}{},
+		autoCloseSources: map[pipeline.EventSourceID]struct{}{},
 		router:           router,
 		lock:             sync.RWMutex{},
 	}
 }
 
-func (s *autoCloser) addAutoCloseSource(source EventSourceID) {
+func (s *AutoCloser) addAutoCloseSource(source pipeline.EventSourceID) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.autoCloseSources[source] = struct{}{}
 }
 
-func (s *autoCloser) deleteAutoClose(eventSourceID EventSourceID) {
+func (s *AutoCloser) deleteAutoClose(eventSourceID pipeline.EventSourceID) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	delete(s.autoCloseTable, eventSourceID)
 }
 
-func (s *autoCloser) addSourceToDestinationAutoClose(src EventSourceID, dests ...EventSourceID) {
+func (s *AutoCloser) addSourceToDestinationAutoClose(src pipeline.EventSourceID, dests ...pipeline.EventSourceID) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	for _, dest := range dests {
 		if _, ok := s.autoCloseTable[dest]; !ok {
 			s.autoCloseTable[dest] = &autoClose{
 				eventSourceID: dest,
-				sourceSet:     map[EventSourceID]struct{}{src: {}},
+				sourceSet:     map[pipeline.EventSourceID]struct{}{src: {}},
 				lock:          sync.RWMutex{},
 			}
 		}
@@ -86,14 +89,14 @@ func (s *autoCloser) addSourceToDestinationAutoClose(src EventSourceID, dests ..
 	}
 }
 
-func (s *autoCloser) hasAutoCloseSource(source EventSourceID) bool {
+func (s *AutoCloser) hasAutoCloseSource(source pipeline.EventSourceID) bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	_, ok := s.autoCloseSources[source]
 	return ok
 }
 
-func (s *autoCloser) allAutoCloses() []*autoClose {
+func (s *AutoCloser) allAutoCloses() []*autoClose {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	var out []*autoClose
@@ -103,11 +106,11 @@ func (s *autoCloser) allAutoCloses() []*autoClose {
 	return out
 }
 
-func (s *autoCloser) AutoCloseDestination(ctx context.Context, src EventSourceID, dests ...EventSourceID) {
+func (s *AutoCloser) AutoCloseDestination(ctx context.Context, src pipeline.EventSourceID, dests ...pipeline.EventSourceID) {
 	if !s.hasAutoCloseSource(src) {
-		conn, ok := s.router.getRouteTo(src)
+		route, ok := s.router.RouteTo(src)
 		if ok {
-			go func(src EventSourceID, conn *connection) {
+			go func(src pipeline.EventSourceID, conn *eventrouter2.Route) {
 				// fmt.Printf("auto-closer: starting watch on %s\n", src)
 				defer func() {
 					// pop the finished input source from all destination auto-closes
@@ -119,10 +122,10 @@ func (s *autoCloser) AutoCloseDestination(ctx context.Context, src EventSourceID
 						// if a destination is out of input sources
 						// close the destination input channel to signal end-of-input
 						if dest.isOutOfSources() {
-							conn, ok := s.router.getRouteTo(dest.eventSourceID)
+							route, ok := s.router.RouteTo(dest.eventSourceID)
 							if ok {
 								// fmt.Printf("%s auto-closed\n", conn.eventSourceID)
-								conn.CloseInputChannel()
+								route.CloseInputChannel()
 								s.deleteAutoClose(dest.eventSourceID)
 							}
 						}
@@ -139,7 +142,7 @@ func (s *autoCloser) AutoCloseDestination(ctx context.Context, src EventSourceID
 					// fmt.Printf("auto-close: %s: source is finished processing\n", src)
 					return
 				}
-			}(src, conn)
+			}(src, route)
 			s.addAutoCloseSource(src)
 		}
 	}

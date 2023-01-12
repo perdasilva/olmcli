@@ -1,4 +1,4 @@
-package eventbus_test
+package event_test
 
 import (
 	"encoding/json"
@@ -6,71 +6,71 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/perdasilva/olmcli/internal/pipeline"
+	"github.com/perdasilva/olmcli/internal/pipeline/event"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/perdasilva/olmcli/internal/eventbus"
 )
 
-var _ eventbus.EventIDProvider = &fakeCustomEventIDProvider{}
+var _ pipeline.EventIDProvider = &fakeCustomEventIDProvider{}
 
 type fakeCustomEventIDProvider struct {
-	fn func() eventbus.EventID
+	fn func() pipeline.EventID
 }
 
-func (f fakeCustomEventIDProvider) NextEventID() eventbus.EventID {
+func (f fakeCustomEventIDProvider) NextEventID() pipeline.EventID {
 	return f.fn()
 }
 
 func TestEventFactory_NewDataEvent(t *testing.T) {
-	factory := eventbus.NewEventFactory[int]("node")
+	factory := event.NewEventFactory[int]("node")
 	dataEvent := factory.NewDataEvent(1)
 	assert.Equal(t, 1, dataEvent.Data())
-	assert.Equal(t, eventbus.EventSourceID("node"), dataEvent.Header().Creator())
+	assert.Equal(t, pipeline.EventSourceID("node"), dataEvent.Header().Creator())
 	assert.Nil(t, dataEvent.Header().Metadata())
 	assert.Empty(t, dataEvent.Header().ParentEventID())
 	assert.Empty(t, dataEvent.Header().Receiver())
 	assert.False(t, dataEvent.Header().IsBroadcastEvent())
 	assert.Empty(t, dataEvent.Header().Visited())
-	assert.Equal(t, eventbus.EventSourceID("node"), dataEvent.Header().Sender())
+	assert.Equal(t, pipeline.EventSourceID("node"), dataEvent.Header().Sender())
 	assert.NotNil(t, dataEvent.Header().CreationTime())
 	assert.NotNil(t, dataEvent.Header().EventID())
 }
 
 func TestEventFactory_NewErrorEvent(t *testing.T) {
-	factory := eventbus.NewEventFactory[int]("node")
+	factory := event.NewEventFactory[int]("node")
 	errorEvent := factory.NewErrorEvent(fmt.Errorf("some error"))
 	assert.Equal(t, fmt.Errorf("some error"), errorEvent.Error())
-	assert.Equal(t, eventbus.EventSourceID("node"), errorEvent.Header().Creator())
+	assert.Equal(t, pipeline.EventSourceID("node"), errorEvent.Header().Creator())
 	assert.Nil(t, errorEvent.Header().Metadata())
 	assert.Empty(t, errorEvent.Header().ParentEventID())
 	assert.Empty(t, errorEvent.Header().Receiver())
 	assert.False(t, errorEvent.Header().IsBroadcastEvent())
 	assert.Empty(t, errorEvent.Header().Visited())
-	assert.Equal(t, eventbus.EventSourceID("node"), errorEvent.Header().Sender())
+	assert.Equal(t, pipeline.EventSourceID("node"), errorEvent.Header().Sender())
 	assert.NotNil(t, errorEvent.Header().CreationTime())
 	assert.NotNil(t, errorEvent.Header().EventID())
 }
 
 func TestEventFactory_NewMutatedDataEvent(t *testing.T) {
-	factory := eventbus.NewEventFactory[int]("node")
+	factory := event.NewEventFactory[int]("node")
 	sourceDataEvent := factory.NewDataEvent(1)
 	dataEvent := factory.NewMutatedDataEvent(sourceDataEvent, 2)
 	assert.Equal(t, 2, dataEvent.Data())
-	assert.Equal(t, eventbus.EventSourceID("node"), dataEvent.Header().Creator())
+	assert.Equal(t, pipeline.EventSourceID("node"), dataEvent.Header().Creator())
 	assert.Nil(t, dataEvent.Header().Metadata())
 	assert.NotNil(t, dataEvent.Header().ParentEventID())
 	assert.Equal(t, sourceDataEvent.Header().EventID(), dataEvent.Header().ParentEventID())
 	assert.Empty(t, dataEvent.Header().Receiver())
 	assert.False(t, dataEvent.Header().IsBroadcastEvent())
 	assert.Empty(t, dataEvent.Header().Visited())
-	assert.Equal(t, eventbus.EventSourceID("node"), dataEvent.Header().Sender())
+	assert.Equal(t, pipeline.EventSourceID("node"), dataEvent.Header().Sender())
 	assert.NotNil(t, dataEvent.Header().CreationTime())
 	assert.NotNil(t, dataEvent.Header().EventID())
 }
 
 func TestEventFactory_NewEventWithMetadata(t *testing.T) {
-	eventMetadata := eventbus.EventMetadata{"meta": "data"}
-	factory := eventbus.NewEventFactory[int]("node", eventbus.WithEventMetadata[int](eventMetadata))
+	eventMetadata := pipeline.EventMetadata{"meta": "data"}
+	factory := event.NewEventFactory[int]("node", event.WithEventMetadata[int](eventMetadata))
 	sourceDataEvent := factory.NewDataEvent(1)
 	dataEvent := factory.NewMutatedDataEvent(sourceDataEvent, 2)
 	errorEvent := factory.NewErrorEvent(fmt.Errorf("some error"))
@@ -80,13 +80,13 @@ func TestEventFactory_NewEventWithMetadata(t *testing.T) {
 }
 
 func TestEventFactory_NewEventWithCustomEventIDProvider(t *testing.T) {
-	staticEventID := eventbus.EventID("1")
+	staticEventID := pipeline.EventID("1")
 	eventIDProvider := fakeCustomEventIDProvider{
-		fn: func() eventbus.EventID {
+		fn: func() pipeline.EventID {
 			return staticEventID
 		},
 	}
-	factory := eventbus.NewEventFactory[int]("node", eventbus.WithEventIDProvider[int](eventIDProvider))
+	factory := event.NewEventFactory[int]("node", event.WithEventIDProvider[int](eventIDProvider))
 	sourceDataEvent := factory.NewDataEvent(1)
 	dataEvent := factory.NewMutatedDataEvent(sourceDataEvent, 2)
 	errorEvent := factory.NewErrorEvent(fmt.Errorf("some error"))
@@ -96,40 +96,40 @@ func TestEventFactory_NewEventWithCustomEventIDProvider(t *testing.T) {
 }
 
 func TestEventFactory_Broadcast(t *testing.T) {
-	factory := eventbus.NewEventFactory[int]("node")
-	event := factory.NewDataEvent(1)
-	event.Broadcast()
-	assert.True(t, event.Header().IsBroadcastEvent())
+	factory := event.NewEventFactory[int]("node")
+	evt := factory.NewDataEvent(1)
+	evt.Broadcast()
+	assert.True(t, evt.Header().IsBroadcastEvent())
 }
 
 func TestEventFactory_Route(t *testing.T) {
-	factory := eventbus.NewEventFactory[int]("node")
-	event := factory.NewDataEvent(1)
-	event.Route("node2")
-	assert.Equal(t, eventbus.EventSourceID("node"), event.Header().Sender())
-	assert.Equal(t, eventbus.EventSourceID("node2"), event.Header().Receiver())
+	factory := event.NewEventFactory[int]("node")
+	evt := factory.NewDataEvent(1)
+	evt.Route("node2")
+	assert.Equal(t, pipeline.EventSourceID("node"), evt.Header().Sender())
+	assert.Equal(t, pipeline.EventSourceID("node2"), evt.Header().Receiver())
 }
 
 func TestEventFactory_Visit(t *testing.T) {
-	factory := eventbus.NewEventFactory[int]("node")
-	event := factory.NewDataEvent(1)
-	event.Visit("node2")
-	assert.NotEmpty(t, event.Header().Visited())
-	assert.Len(t, event.Header().Visited(), 1)
-	assert.Equal(t, eventbus.EventSourceID("node2"), event.Header().Visited()[0].EventSourceID())
+	factory := event.NewEventFactory[int]("node")
+	evt := factory.NewDataEvent(1)
+	evt.Visit("node2")
+	assert.NotEmpty(t, evt.Header().Visited())
+	assert.Len(t, evt.Header().Visited(), 1)
+	assert.Equal(t, pipeline.EventSourceID("node2"), evt.Header().Visited()[0].EventSourceID())
 }
 
 func TestEventFactory_JSONSerializable(t *testing.T) {
-	staticEventID := eventbus.EventID("1")
+	staticEventID := pipeline.EventID("1")
 	eventIDProvider := fakeCustomEventIDProvider{
-		fn: func() eventbus.EventID {
+		fn: func() pipeline.EventID {
 			return staticEventID
 		},
 	}
-	factory := eventbus.NewEventFactory[int]("node", eventbus.WithEventIDProvider[int](eventIDProvider))
-	event := factory.NewDataEvent(1)
-	event.Visit("node2")
-	bytes, err := json.Marshal(event)
+	factory := event.NewEventFactory[int]("node", event.WithEventIDProvider[int](eventIDProvider))
+	evt := factory.NewDataEvent(1)
+	evt.Visit("node2")
+	bytes, err := json.Marshal(evt)
 	assert.Nil(t, err)
 	regExp, err := regexp.Compile(`\{"header":\{"eventID":"1","creatorEventSourceID":"node","sender":"node","broadcast":false,"creationTime":"\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d\..*","visited":\[\{"eventSourceID":"node2","visitationTime":"\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d\..*"}]},"data":1}`)
 	assert.Nil(t, err)

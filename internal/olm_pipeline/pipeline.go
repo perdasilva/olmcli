@@ -1,15 +1,18 @@
-package pipeline
+package olm_pipeline
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/perdasilva/olmcli/internal/eventbus"
-	"github.com/perdasilva/olmcli/internal/pipeline/bundle_generator"
-	"github.com/perdasilva/olmcli/internal/pipeline/output"
-	"github.com/perdasilva/olmcli/internal/pipeline/required_package"
-	"github.com/perdasilva/olmcli/internal/pipeline/solver"
-	"github.com/perdasilva/olmcli/internal/pipeline/uniqueness"
+	"github.com/perdasilva/olmcli/internal/olm_pipeline/bundle_generator"
+	"github.com/perdasilva/olmcli/internal/olm_pipeline/output"
+	"github.com/perdasilva/olmcli/internal/olm_pipeline/required_package"
+	"github.com/perdasilva/olmcli/internal/olm_pipeline/solver"
+	"github.com/perdasilva/olmcli/internal/olm_pipeline/uniqueness"
+	"github.com/perdasilva/olmcli/internal/pipeline"
+	"github.com/perdasilva/olmcli/internal/pipeline/eventbus"
+	"github.com/perdasilva/olmcli/internal/pipeline/eventbus/eventrouter"
+	v2 "github.com/perdasilva/olmcli/internal/pipeline/eventsource/v2"
 	"github.com/perdasilva/olmcli/internal/utils"
 )
 
@@ -24,9 +27,9 @@ func NewResolutionPipeline(source *utils.OLMEntitySource) *ResolutionPipeline {
 }
 
 func (r *ResolutionPipeline) Execute(ctx context.Context, requiredPackages ...*required_package.RequiredPackageProducer) ([]utils.OLMVariable, error) {
-	debug := true
-	debugChannel := make(chan eventbus.Event)
-	bus := eventbus.NewEventBus(ctx, eventbus.WithDebugChannel(debugChannel))
+	debug := false
+	debugChannel := make(chan pipeline.Event)
+	bus := eventbus.NewEventBus(ctx, eventrouter.WithDebugChannel(debugChannel))
 
 	go func() {
 		for {
@@ -48,28 +51,28 @@ func (r *ResolutionPipeline) Execute(ctx context.Context, requiredPackages ...*r
 
 	// network output
 	resolverOutput := output.NewOutput()
-	out := eventbus.NewEventConsumer[utils.OLMVariable]("output", resolverOutput, bus)
+	out := v2.NewConsumerEventSource[utils.OLMVariable]("output", resolverOutput, bus)
 	out.Start(ctx)
 
 	// solver
-	resolver := eventbus.NewEventProcessor[utils.OLMVariable]("resolver", solver.NewSolver(), bus)
+	resolver := v2.NewProcessorEventSource[utils.OLMVariable]("resolver", solver.NewSolver(), bus)
 	resolver.AddOutput("output")
 	resolver.Start(ctx)
 
 	// global uniqueness constraints
-	globalConstraints := eventbus.NewEventProcessor[utils.OLMVariable]("globalConstraints", uniqueness.NewUniqueness(), bus)
+	globalConstraints := v2.NewProcessorEventSource[utils.OLMVariable]("globalConstraints", uniqueness.NewUniqueness(), bus)
 	globalConstraints.AddOutput("resolver")
 	globalConstraints.Start(ctx)
 
 	// bundle and bundle dependency variables
-	bundleAndDependencies := eventbus.NewEventProcessor[utils.OLMVariable]("bundlesAndDependencies", bundle_generator.NewBundleGenerator(r.source), bus)
+	bundleAndDependencies := v2.NewProcessorEventSource[utils.OLMVariable]("bundlesAndDependencies", bundle_generator.NewBundleGenerator(r.source), bus)
 	bundleAndDependencies.AddOutput("resolver", "globalConstraints")
 	bundleAndDependencies.Start(ctx)
 
 	// sources
-	var sources []*eventbus.EventProducer[utils.OLMVariable]
+	var sources []pipeline.ProducerEventSource
 	for _, rp := range requiredPackages {
-		source := eventbus.NewEventProducer[utils.OLMVariable](eventbus.EventSourceID(fmt.Sprintf("%s-required", rp.RequiredPackageName())), rp, bus)
+		source := v2.NewProducerEventSource[utils.OLMVariable](pipeline.EventSourceID(fmt.Sprintf("%s-required", rp.RequiredPackageName())), rp, bus)
 		source.AddOutput("resolver", "bundlesAndDependencies")
 		source.Start(ctx)
 		sources = append(sources, source)
@@ -94,11 +97,11 @@ func (r *ResolutionPipeline) Execute(ctx context.Context, requiredPackages ...*r
 	}*/
 
 	switch out.State() {
-	case eventbus.EventSourceStateSuccess:
+	case pipeline.EventSourceStateSuccess:
 		return resolverOutput.Variables(), nil
-	case eventbus.EventSourceStateFailed:
+	case pipeline.EventSourceStateFailed:
 		return nil, out.Reason().Error()
-	case eventbus.EventSourceStateAborted:
+	case pipeline.EventSourceStateAborted:
 		return nil, out.Reason().Error()
 	default:
 		return nil, fmt.Errorf("output consumer is in unknown state (%s)", out.State())
