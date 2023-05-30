@@ -45,12 +45,12 @@ var resolveCmd = &cobra.Command{
 		l.AppendItem("Resolved Bundles")
 		l.Indent()
 		for _, installable := range installables {
-			l.AppendItem(installable.BundleID)
-			l.Indent()
-			for dep, _ := range installable.Dependencies {
-				l.AppendItem(dep)
-			}
-			l.UnIndent()
+			l.AppendItem(installable.Identifier())
+			//l.Indent()
+			//for dep, _ := range installable.Dependencies {
+			//	l.AppendItem(dep)
+			//}
+			//l.UnIndent()
 		}
 		l.UnIndent()
 		for _, line := range strings.Split(l.Render(), "\n") {

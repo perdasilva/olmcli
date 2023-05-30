@@ -1,28 +1,29 @@
 package utils
 
 import (
-	"github.com/operator-framework/deppy/pkg/sat"
+	"github.com/operator-framework/deppy/pkg/deppy"
+	"github.com/operator-framework/deppy/pkg/deppy/constraint"
 	"github.com/perdasilva/olmcli/internal/store"
 )
 
 type OLMVariable interface {
-	sat.Variable
+	deppy.Variable
 	OrderedEntities() []store.CachedBundle
 }
 
-var _ sat.Variable = &olmVariable{}
+var _ deppy.Variable = &olmVariable{}
 
 type olmVariable struct {
-	ID              sat.Identifier `json:"variableID"`
+	ID              deppy.Identifier `json:"variableID"`
 	orderedEntities []store.CachedBundle
-	constraints     []sat.Constraint
+	constraints     []deppy.Constraint
 }
 
-func (v olmVariable) Identifier() sat.Identifier {
+func (v olmVariable) Identifier() deppy.Identifier {
 	return v.ID
 }
 
-func (v olmVariable) Constraints() []sat.Constraint {
+func (v olmVariable) Constraints() []deppy.Constraint {
 	return v.constraints
 }
 
@@ -30,12 +31,12 @@ func (v olmVariable) OrderedEntities() []store.CachedBundle {
 	return v.orderedEntities
 }
 
-func NewRequiredPackageVariable(id sat.Identifier, orderedEntities ...store.CachedBundle) OLMVariable {
-	constraints := []sat.Constraint{
-		sat.Mandatory(),
+func NewRequiredPackageVariable(id deppy.Identifier, orderedEntities ...store.CachedBundle) OLMVariable {
+	constraints := []deppy.Constraint{
+		constraint.Mandatory(),
 	}
 	if len(orderedEntities) > 0 {
-		constraints = append(constraints, sat.Dependency(toIdentifierIDs(orderedEntities)...))
+		constraints = append(constraints, constraint.Dependency(toIdentifierIDs(orderedEntities)...))
 	}
 	return &olmVariable{
 		ID:              id,
@@ -44,11 +45,11 @@ func NewRequiredPackageVariable(id sat.Identifier, orderedEntities ...store.Cach
 	}
 }
 
-func NewUniquenessVariable(id sat.Identifier, orderedEntities ...store.CachedBundle) OLMVariable {
-	var constraints []sat.Constraint
+func NewUniquenessVariable(id deppy.Identifier, orderedEntities ...store.CachedBundle) OLMVariable {
+	var constraints []deppy.Constraint
 	if len(orderedEntities) > 0 {
-		constraints = []sat.Constraint{
-			sat.AtMost(1, toIdentifierIDs(orderedEntities)...),
+		constraints = []deppy.Constraint{
+			constraint.AtMost(1, toIdentifierIDs(orderedEntities)...),
 		}
 	}
 	return &olmVariable{
@@ -58,19 +59,19 @@ func NewUniquenessVariable(id sat.Identifier, orderedEntities ...store.CachedBun
 	}
 }
 
-var _ sat.Variable = &BundleVariable{}
+var _ deppy.Variable = &BundleVariable{}
 
 type BundleVariable struct {
 	*store.CachedBundle
 	orderedDependencies []store.CachedBundle
-	constraints         []sat.Constraint
+	constraints         []deppy.Constraint
 }
 
 func NewBundleVariable(entity *store.CachedBundle, orderedDependencies ...store.CachedBundle) OLMVariable {
-	var constraints []sat.Constraint
+	var constraints []deppy.Constraint
 	if len(orderedDependencies) > 0 {
-		constraints = []sat.Constraint{
-			sat.Dependency(toIdentifierIDs(orderedDependencies)...),
+		constraints = []deppy.Constraint{
+			constraint.Dependency(toIdentifierIDs(orderedDependencies)...),
 		}
 	}
 	return &BundleVariable{
@@ -80,11 +81,11 @@ func NewBundleVariable(entity *store.CachedBundle, orderedDependencies ...store.
 	}
 }
 
-func (b BundleVariable) Identifier() sat.Identifier {
-	return sat.Identifier(b.BundleID)
+func (b BundleVariable) Identifier() deppy.Identifier {
+	return deppy.Identifier(b.BundleID)
 }
 
-func (b BundleVariable) Constraints() []sat.Constraint {
+func (b BundleVariable) Constraints() []deppy.Constraint {
 	return b.constraints
 }
 
@@ -92,10 +93,10 @@ func (b BundleVariable) OrderedEntities() []store.CachedBundle {
 	return b.orderedDependencies
 }
 
-func toIdentifierIDs(entities []store.CachedBundle) []sat.Identifier {
-	ids := make([]sat.Identifier, len(entities))
+func toIdentifierIDs(entities []store.CachedBundle) []deppy.Identifier {
+	ids := make([]deppy.Identifier, len(entities))
 	for index, _ := range entities {
-		ids[index] = sat.Identifier(entities[index].BundleID)
+		ids[index] = deppy.Identifier(entities[index].BundleID)
 	}
 	return ids
 }

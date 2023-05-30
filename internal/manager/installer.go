@@ -6,64 +6,84 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v4"
+	"github.com/operator-framework/deppy/pkg/deppy/solver"
 	"github.com/operator-framework/rukpak/api/v1alpha1"
-	"github.com/perdasilva/olmcli/internal/resolution"
+	"github.com/perdasilva/olmcli/internal/resolver"
+	"github.com/perdasilva/olmcli/internal/store"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 type PackageInstaller struct {
 	client   client.Client
 	logger   *logrus.Logger
-	resolver *resolution.OLMSolver
+	database store.PackageDatabase
 }
 
-func NewPackageInstaller(resolver *resolution.OLMSolver, logger *logrus.Logger) (*PackageInstaller, error) {
-	c, err := client.New(config.GetConfigOrDie(), client.Options{})
-	if err != nil {
-		return nil, err
-	}
-	if err := v1alpha1.AddToScheme(c.Scheme()); err != nil {
-		return nil, err
-	}
+func NewPackageInstaller(database store.PackageDatabase, logger *logrus.Logger) (*PackageInstaller, error) {
+	//c, err := client.New(config.GetConfigOrDie(), client.Options{})
+	//if err != nil {
+	//	return nil, err
+	//}
+	//if err := v1alpha1.AddToScheme(c.Scheme()); err != nil {
+	//	return nil, err
+	//}
 	return &PackageInstaller{
-		client:   c,
-		resolver: resolver,
+		// client:   c,
 		logger:   logger,
+		database: database,
 	}, nil
 }
 
-func (p *PackageInstaller) Install(ctx context.Context, requiredPackages ...*resolution.RequiredPackage) error {
-	installables, err := p.Resolve(ctx, requiredPackages...)
+func (p *PackageInstaller) Install(ctx context.Context, sources ...resolver.VariableSource) error {
+	installables, err := p.Resolve(ctx, sources...)
 	if err != nil {
 		return err
 	}
 	for _, installable := range installables {
-		if err := p.install(ctx, &installable); err != nil {
-			return err
+		if installable.Kind() == "olm.variable.bundle" {
+			if err := p.install(ctx, &installable); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func (p *PackageInstaller) Resolve(ctx context.Context, requiredPackages ...*resolution.RequiredPackage) ([]resolution.Installable, error) {
+func (p *PackageInstaller) Resolve(ctx context.Context, sources ...resolver.VariableSource) ([]resolver.Variable, error) {
 	p.logger.Debugf("resolving dependencies")
 	start := time.Now()
-	installables, err := p.resolver.Solve(ctx, requiredPackages...)
+	variableSources := resolver.NewOLMVariableSources(p.database)
+	for _, source := range sources {
+		variableSources = append(variableSources, source)
+	}
+	resolution := resolver.NewResolution(variableSources...)
+	deppySolver, err := solver.NewDeppySolver(nil, resolution)
 	if err != nil {
 		p.logger.Fatal(err)
 		return nil, err
+	}
+	solution, err := deppySolver.Solve(ctx)
+	if err != nil {
+		p.logger.Fatal(err)
+		return nil, err
+	}
+	installables := make([]resolver.Variable, 0, len(solution.SelectedVariables()))
+	for _, variable := range solution.SelectedVariables() {
+		v := variable.(*resolver.Variable)
+		if v.Properties["kind"] == "olm.variable.bundle" {
+			installables = append(installables, *v)
+		}
 	}
 	elapsed := time.Since(start)
 	p.logger.Debugf("took %s", elapsed)
 	return installables, nil
 }
 
-func (p *PackageInstaller) install(ctx context.Context, installable *resolution.Installable) error {
-	p.logger.Printf("Installing %s", installable.BundleID)
+func (p *PackageInstaller) install(ctx context.Context, installable *resolver.Variable) error {
+	p.logger.Printf("Installing %s", installable.Properties["olm.package.name"].(string))
 	bundleDeployment := p.bundleDeploymentFromInstallable(installable)
 	if err := p.client.Create(ctx, bundleDeployment); err != nil {
 		return err
@@ -88,15 +108,15 @@ func (p *PackageInstaller) watchInstallation(ctx context.Context, bundleDeployme
 	}, retry.Context(ctx), retry.Attempts(10), retry.Delay(10*time.Second))
 }
 
-func (p *PackageInstaller) bundleDeploymentFromInstallable(installable *resolution.Installable) *v1alpha1.BundleDeployment {
+func (p *PackageInstaller) bundleDeploymentFromInstallable(installable *resolver.Variable) *v1alpha1.BundleDeployment {
 	return &v1alpha1.BundleDeployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: installable.PackageName,
-			Annotations: map[string]string{
-				"annotations.olm.io/repository": installable.Repository,
-				"annotations.olm.io/version":    installable.Version,
-				"annotations.olm.io/channel":    installable.ChannelName,
-			},
+			Name: installable.Properties["olm.package.name"].(string),
+			//Annotations: map[string]string{
+			//	"annotations.olm.io/repository": installable.Repository,
+			//	"annotations.olm.io/version":    installable.Version,
+			//	"annotations.olm.io/channel":    installable.ChannelName,
+			//},
 		},
 		Spec: v1alpha1.BundleDeploymentSpec{
 			ProvisionerClassName: "core-rukpak-io-plain",
@@ -106,7 +126,7 @@ func (p *PackageInstaller) bundleDeploymentFromInstallable(installable *resoluti
 					Source: v1alpha1.BundleSource{
 						Type: v1alpha1.SourceTypeImage,
 						Image: &v1alpha1.ImageSource{
-							Ref:                 installable.GetBundlePath(),
+							Ref:                 installable.Properties["olm.bundle.path"].(string),
 							ImagePullSecretName: "regcred",
 						},
 					},

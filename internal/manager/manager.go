@@ -2,10 +2,11 @@ package manager
 
 import (
 	"context"
+	"fmt"
 	"path"
 
 	"github.com/perdasilva/olmcli/internal/repository"
-	"github.com/perdasilva/olmcli/internal/resolution"
+	"github.com/perdasilva/olmcli/internal/resolver"
 	"github.com/perdasilva/olmcli/internal/store"
 	"github.com/sirupsen/logrus"
 )
@@ -15,14 +16,14 @@ type Manager interface {
 	AddRepository(ctx context.Context, repositoryImageUrl string) error
 	ListRepositories(ctx context.Context) ([]store.CachedRepository, error)
 	ListGVKs(ctx context.Context) (map[string][]store.CachedBundle, error)
-	ListBundlesForGVK(ctx context.Context, group string, version string, kind string) ([]store.CachedBundle, error)
+	GetBundlesForGVK(ctx context.Context, group string, version string, kind string) ([]store.CachedBundle, error)
 	SearchBundles(ctx context.Context, searchTerm string) ([]store.CachedBundle, error)
 	SearchPackages(ctx context.Context, searchTerm string) ([]store.CachedPackage, error)
 	RemoveRepository(ctx context.Context, repoName string) error
 	ListBundles(ctx context.Context) ([]store.CachedBundle, error)
 	ListPackages(ctx context.Context) ([]store.CachedPackage, error)
 	Install(ctx context.Context, packageName string) error
-	Resolve(ctx context.Context, packageName ...string) ([]resolution.Installable, error)
+	Resolve(ctx context.Context, packageName ...string) ([]resolver.Variable, error)
 	GetBundlesForPackage(ctx context.Context, packageName string, options ...store.PackageSearchOption) ([]store.CachedBundle, error)
 	Close() error
 }
@@ -46,7 +47,7 @@ func NewManager(configPath string, logger *logrus.Logger) (Manager, error) {
 		return nil, err
 	}
 
-	installer, err := NewPackageInstaller(resolution.NewOLMSolver(packageDatabase, logger), logger)
+	installer, err := NewPackageInstaller(packageDatabase, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -60,20 +61,18 @@ func NewManager(configPath string, logger *logrus.Logger) (Manager, error) {
 }
 
 func (m *containerBasedManager) Install(ctx context.Context, packageName string) error {
-	packageRequired, err := resolution.NewRequiredPackage(packageName)
-	if err != nil {
-		return err
-	}
-	return m.installer.Install(ctx, packageRequired)
+	//packageRequired, err := resolution.NewRequiredPackage(packageName)
+	//if err != nil {
+	//	return err
+	//}
+	//return m.installer.Install(ctx, packageRequired)
+	return fmt.Errorf("not implemented")
 }
 
-func (m *containerBasedManager) Resolve(ctx context.Context, packageNames ...string) ([]resolution.Installable, error) {
-	requiredPackages := make([]*resolution.RequiredPackage, len(packageNames))
+func (m *containerBasedManager) Resolve(ctx context.Context, packageNames ...string) ([]resolver.Variable, error) {
+	requiredPackages := make([]resolver.VariableSource, len(packageNames))
 	for index, name := range packageNames {
-		packageRequired, err := resolution.NewRequiredPackage(name)
-		if err != nil {
-			return nil, err
-		}
+		packageRequired := resolver.NewRequiredPackageSource(name, ">=0.0.0")
 		requiredPackages[index] = packageRequired
 	}
 

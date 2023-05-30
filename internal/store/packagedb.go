@@ -11,7 +11,6 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/boltdb/bolt"
-	v2 "github.com/operator-framework/deppy/pkg/v2"
 	"github.com/operator-framework/operator-registry/alpha/property"
 	"github.com/operator-framework/operator-registry/pkg/api"
 	"github.com/perdasilva/olmcli/internal/repository"
@@ -110,8 +109,8 @@ func (c CachedBundle) EntryID() string {
 	return c.BundleID
 }
 
-func (c CachedBundle) ID() v2.EntityID {
-	return v2.EntityID(c.BundleID)
+func (c CachedBundle) ID() string {
+	return c.BundleID
 }
 
 type CachedPackage struct {
@@ -139,7 +138,7 @@ type PackageDatabase interface {
 	ListRepositories(ctx context.Context) ([]CachedRepository, error)
 	ListPackages(ctx context.Context) ([]CachedPackage, error)
 	ListBundles(ctx context.Context) ([]CachedBundle, error)
-	ListBundlesForGVK(ctx context.Context, group string, version string, kind string) ([]CachedBundle, error)
+	GetBundlesForGVK(ctx context.Context, group string, version string, kind string) ([]CachedBundle, error)
 	ListGVKs(ctx context.Context) (map[string][]CachedBundle, error)
 	SearchPackages(ctx context.Context, searchTerm string) ([]CachedPackage, error)
 	SearchBundles(ctx context.Context, searchTerm string) ([]CachedBundle, error)
@@ -329,7 +328,7 @@ func (b *boltPackageDatabase) ListPackages(_ context.Context) ([]CachedPackage, 
 	return b.packageTable.List()
 }
 
-func (b *boltPackageDatabase) ListBundlesForGVK(_ context.Context, group string, version string, kind string) ([]CachedBundle, error) {
+func (b *boltPackageDatabase) GetBundlesForGVK(_ context.Context, group string, version string, kind string) ([]CachedBundle, error) {
 	gvkBundles, err := b.gvkTable.Seek(fmt.Sprintf("%s%s", strings.Join([]string{group, version, kind}, keySeparator), keySeparator))
 	if err != nil {
 		return nil, err
