@@ -152,9 +152,7 @@ func (rs *resolution) gatherVariables(ctx context.Context) error {
 			if IsFatalError(err) {
 				return err
 			}
-			if err != nil {
-				fmt.Println(err)
-			}
+			// todo: add warning log
 		}
 	}
 	return nil

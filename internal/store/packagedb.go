@@ -105,6 +105,30 @@ type CachedBundle struct {
 	PackageDependencies []property.Package `json:"packageDependencies"`
 }
 
+func (c CachedBundle) PackageDependenciesJSON() (string, error) {
+	b, err := json.Marshal(c.PackageDependencies)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func (c CachedBundle) ProvidedAPIsJSON() (string, error) {
+	b, err := json.Marshal(c.ProvidedApis)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func (c CachedBundle) RequiredAPIsJSON() (string, error) {
+	b, err := json.Marshal(c.RequiredApis)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 func (c CachedBundle) EntryID() string {
 	return c.BundleID
 }

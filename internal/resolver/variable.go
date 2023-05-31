@@ -18,12 +18,12 @@ func NewVariable(variableID string, kind string, properties map[string]interface
 	if properties == nil {
 		properties = make(map[string]interface{})
 	}
-	if _, ok := properties["kind"]; ok {
-		panic("properties already contains kind")
-	}
-	if _, ok := properties["id"]; ok {
-		panic("properties already contains id")
-	}
+	//if _, ok := properties["kind"]; ok {
+	//	panic("properties already contains kind")
+	//}
+	//if _, ok := properties["id"]; ok {
+	//	panic("properties already contains id")
+	//}
 	properties["kind"] = kind
 	properties["id"] = variableID
 	return &Variable{
@@ -47,6 +47,13 @@ func (v *Variable) Constraints() []deppy.Constraint {
 		constraints = append(constraints, c)
 	}
 	return constraints
+}
+
+func (v *Variable) Property(key string) interface{} {
+	if v, ok := v.Properties[key]; ok {
+		return v
+	}
+	return ""
 }
 
 func (v *Variable) AddMandatory() {
