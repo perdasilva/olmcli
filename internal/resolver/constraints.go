@@ -3,7 +3,11 @@ package resolver
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 
+	"github.com/antonmedv/expr"
+	"github.com/blang/semver/v4"
 	"github.com/operator-framework/deppy/pkg/deppy"
 	"github.com/operator-framework/deppy/pkg/deppy/constraint"
 )
@@ -28,12 +32,17 @@ type Constraint interface {
 	ConstraintID() string
 	Kind() string
 	MarshalJSON() ([]byte, error)
+	Sort() error
 }
 
 var _ Constraint = &MandatoryConstraint{}
 
 type MandatoryConstraint struct {
 	deppy.Constraint
+}
+
+func (m MandatoryConstraint) Sort() error {
+	return nil
 }
 
 func (m MandatoryConstraint) MarshalJSON() ([]byte, error) {
@@ -64,6 +73,10 @@ type ProhibitedConstraint struct {
 	deppy.Constraint
 }
 
+func (p ProhibitedConstraint) Sort() error {
+	return nil
+}
+
 func (p ProhibitedConstraint) Kind() string {
 	return ProhibitedConstraintKind
 }
@@ -72,13 +85,13 @@ func (p ProhibitedConstraint) ConstraintID() string {
 	return ProhibitedConstraintID
 }
 
-func (m ProhibitedConstraint) MarshalJSON() ([]byte, error) {
+func (p ProhibitedConstraint) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		ID   string `json:"id"`
 		Kind string `json:"kind"`
 	}{
-		ID:   m.ConstraintID(),
-		Kind: m.Kind(),
+		ID:   p.ConstraintID(),
+		Kind: p.Kind(),
 	})
 }
 
@@ -95,6 +108,10 @@ type ConflictConstraint struct {
 
 func (c ConflictConstraint) Kind() string {
 	return ConflictConstraintKind
+}
+
+func (c ConflictConstraint) Sort() error {
+	return nil
 }
 
 func (c ConflictConstraint) ConstraintID() string {
@@ -122,7 +139,8 @@ var _ Constraint = &DependencyConstraint{}
 type DependencyConstraint struct {
 	constraintID string
 	deppy.Constraint
-	dependencies map[deppy.Identifier]Variable
+	dependencies    map[deppy.Identifier]Variable
+	orderPreference string
 }
 
 func (d *DependencyConstraint) Kind() string {
@@ -154,7 +172,7 @@ func Dependency(constraintID string, dependencies ...Variable) Constraint {
 	for _, d := range dependencies {
 		deps[d.Identifier()] = d
 	}
-	return &DependencyConstraint{constraintID, constraint.Dependency(toIdentifierIDs(deps)...), deps}
+	return &DependencyConstraint{constraintID, constraint.Dependency(toIdentifierIDs(deps)...), deps, ""}
 }
 
 func (d *DependencyConstraint) AddDependency(dependentVariable Variable) {
@@ -171,13 +189,27 @@ func (d *DependencyConstraint) RemoveDependency(dependentVariable Variable) {
 	}
 }
 
+func (d *DependencyConstraint) Sort() error {
+	if d.orderPreference == "" {
+		return nil
+	}
+	depIds, err := variablesInPreferenceOrder(d.dependencies, d.orderPreference)
+	if err != nil {
+		return err
+	}
+
+	d.Constraint = constraint.Dependency(depIds...)
+	return nil
+}
+
 var _ Constraint = &AtMostConstraint{}
 
 type AtMostConstraint struct {
 	constraintID string
 	deppy.Constraint
-	n         int
-	variables map[deppy.Identifier]Variable
+	n               int
+	variables       map[deppy.Identifier]Variable
+	orderPreference string
 }
 
 func (a *AtMostConstraint) Kind() string {
@@ -190,6 +222,19 @@ func (a *AtMostConstraint) ConstraintID() string {
 
 func (a *AtMostConstraint) N() int {
 	return a.n
+}
+
+func (a *AtMostConstraint) Sort() error {
+	if a.orderPreference == "" {
+		return nil
+	}
+	varIds, err := variablesInPreferenceOrder(a.variables, a.orderPreference)
+	if err != nil {
+		return err
+	}
+
+	a.Constraint = constraint.AtMost(a.n, varIds...)
+	return nil
 }
 
 func (a *AtMostConstraint) MarshalJSON() ([]byte, error) {
@@ -215,7 +260,7 @@ func AtMost(constraintID string, n int, variables ...Variable) Constraint {
 	for _, v := range variables {
 		vars[v.Identifier()] = v
 	}
-	return &AtMostConstraint{constraintID, constraint.AtMost(n, toIdentifierIDs(vars)...), n, vars}
+	return &AtMostConstraint{constraintID, constraint.AtMost(n, toIdentifierIDs(vars)...), n, vars, ""}
 }
 
 func (a *AtMostConstraint) AddVariable(variable Variable) {
@@ -238,4 +283,56 @@ func toIdentifierIDs(variables map[deppy.Identifier]Variable) []deppy.Identifier
 		ids = append(ids, v.Identifier())
 	}
 	return ids
+}
+
+func variablesInPreferenceOrder(variables map[deppy.Identifier]Variable, orderPreference string) ([]deppy.Identifier, error) {
+	sortFn := strings.Trim(orderPreference, "{{}} ")
+	vars := make([]Variable, 0, len(variables))
+	for _, v := range variables {
+		vars = append(vars, v)
+	}
+	program, err := expr.Compile(sortFn, expr.AsBool())
+	if err != nil {
+		return nil, FatalError(fmt.Sprintf("failed to compile preference order function: %s", err))
+	}
+	var outerError error
+	sort.Slice(vars, func(i, j int) bool {
+		result, err := expr.Run(program, map[string]interface{}{
+			"v1": vars[i],
+			"v2": vars[j],
+			"semverCompare": func(a string, b string) (int, error) {
+				left, err := semver.Parse(a)
+				if err != nil {
+					return 0, err
+				}
+				right, err := semver.Parse(b)
+				if err != nil {
+					return 0, err
+				}
+				if left.GT(right) {
+					return 1, nil
+				}
+				if left.LT(right) {
+					return -1, nil
+				}
+				return 0, nil
+			},
+		})
+		if err != nil {
+			outerError = FatalError(fmt.Sprintf("failed to run preference order function: %s", err))
+			return false
+		}
+		return result.(bool)
+	})
+
+	if outerError != nil {
+		return nil, outerError
+	}
+
+	varIds := make([]deppy.Identifier, 0, len(vars))
+	for _, v := range vars {
+		varIds = append(varIds, v.Identifier())
+	}
+
+	return varIds, nil
 }

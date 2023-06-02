@@ -243,15 +243,22 @@ params:
 	}
 
 	resolution := resolver.NewResolution(variableSources...)
-	ctx := context.Background()
 
 	// variables, err := resolution.GetVariables(ctx, nil)
 	s, _ := solver.NewDeppySolver(nil, resolution)
-	solution, err := s.Solve(ctx, solver.AddAllVariablesToSolution())
+	solution, err := s.Solve(context.Background(), solver.AddAllVariablesToSolution())
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Println("selected: ")
 	for _, v := range solution.SelectedVariables() {
+		j, _ := json.MarshalIndent(v, "", "  ")
+		fmt.Println(string(j))
+	}
+
+	fmt.Println("all: ")
+	for _, v := range solution.AllVariables() {
 		j, _ := json.MarshalIndent(v, "", "  ")
 		fmt.Println(string(j))
 	}

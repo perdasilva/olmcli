@@ -111,16 +111,13 @@ func (v *Variable) RemoveConstraint(constraintID string) {
 	delete(v.VarConstraints, constraintID)
 }
 
-func (v *Variable) AddAtMost(constraintID string, n int, variable Variable) error {
+func (v *Variable) AddAtMostVariable(constraintID string, variable Variable) error {
 	if _, ok := v.VarConstraints[constraintID]; !ok {
-		v.VarConstraints[constraintID] = AtMost(constraintID, n)
+		v.VarConstraints[constraintID] = AtMost(constraintID, 0)
 	}
 	c, ok := v.VarConstraints[constraintID].(*AtMostConstraint)
 	if !ok {
 		return fmt.Errorf("constraint with id %s is not an AtMost constraint", constraintID)
-	}
-	if n != c.n {
-		return fmt.Errorf("constraint with id %s has different n than %d", constraintID, n)
 	}
 	c.AddVariable(variable)
 	return nil
@@ -136,4 +133,57 @@ func (v *Variable) RemoveAtMost(constraintID string, variable Variable) error {
 	}
 	c.RemoveVariable(variable)
 	return nil
+}
+
+func (v *Variable) AddAtMostN(constraintID string, n int) error {
+	if _, ok := v.VarConstraints[constraintID]; !ok {
+		v.VarConstraints[constraintID] = AtMost(constraintID, 0)
+	}
+	c, ok := v.VarConstraints[constraintID].(*AtMostConstraint)
+	if !ok {
+		return fmt.Errorf("constraint with id %s is not an AtMost constraint", constraintID)
+	}
+	if c.n != 0 && c.n != n {
+		return fmt.Errorf("constraint with id %s already has n=%d", constraintID, n)
+	}
+	c.n = n
+	return nil
+}
+
+func (v *Variable) AddAtMostSort(constraintID string, orderPreference string) error {
+	if _, ok := v.VarConstraints[constraintID]; !ok {
+		v.VarConstraints[constraintID] = AtMost(constraintID, 0)
+	}
+	c, ok := v.VarConstraints[constraintID].(*AtMostConstraint)
+	if !ok {
+		return fmt.Errorf("constraint with id %s is not an AtMost constraint", constraintID)
+	}
+	if c.orderPreference != "" && c.orderPreference != orderPreference {
+		return fmt.Errorf("constraint with id %s already has orderPreference=%s", constraintID, orderPreference)
+	}
+	c.orderPreference = orderPreference
+	return nil
+}
+
+func (v *Variable) AddDependencySort(constraintID string, orderPreference string) error {
+	if _, ok := v.VarConstraints[constraintID]; !ok {
+		v.VarConstraints[constraintID] = AtMost(constraintID, 0)
+	}
+	c, ok := v.VarConstraints[constraintID].(*DependencyConstraint)
+	if !ok {
+		return fmt.Errorf("constraint with id %s is not an AtMost constraint", constraintID)
+	}
+	if c.orderPreference != "" && c.orderPreference != orderPreference {
+		return fmt.Errorf("constraint with id %s already has orderPreference=%s", constraintID, orderPreference)
+	}
+	c.orderPreference = orderPreference
+	return nil
+}
+
+func (v *Variable) AddAtMost(id string, n int, variable Variable) error {
+	err := v.AddAtMostN(id, n)
+	if err != nil {
+		return err
+	}
+	return v.AddAtMostVariable(id, variable)
 }

@@ -3,9 +3,11 @@ module github.com/perdasilva/olmcli
 go 1.19
 
 require (
+	github.com/antonmedv/expr v1.12.5
 	github.com/avast/retry-go/v4 v4.3.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/boltdb/bolt v1.3.1
+	github.com/ghodss/yaml v1.0.0
 	github.com/google/uuid v1.2.0
 	github.com/jedib0t/go-pretty/v6 v6.4.6
 	github.com/operator-framework/deppy v0.0.0-20230419145848-9a7655cd364b
@@ -15,6 +17,7 @@ require (
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.14.0
 	github.com/stretchr/testify v1.8.1
+	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.26.1
 	sigs.k8s.io/controller-runtime v0.14.4
 )
@@ -71,7 +74,6 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.26.1 // indirect
 	k8s.io/client-go v0.26.1 // indirect
 	k8s.io/klog/v2 v2.80.1 // indirect

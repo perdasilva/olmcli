@@ -1,0 +1,200 @@
+---
+id: required-package/kuadrant-operator
+kindFilter: ""
+task:
+  edits:
+    edits:
+      - action: Add
+        kind: olm.variable.required-package
+        params:
+          properties:
+            olm.package.name: kuadrant-operator
+            olm.package.version: '>0.0.0'
+        type: VariableEdit
+        variableId: required-package/kuadrant-operator
+  taskType: EditTask
+---
+id: required-package/:add-mandatory
+kindFilter: olm.variable.required-package
+task:
+  edits:
+    edits:
+      - action: Add
+        constraintType: Mandatory
+        kind: olm.variable.required-package
+        type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+  taskType: EditTask
+---
+id: required-package/:bundles
+kindFilter: olm.variable.required-package
+task:
+  taskType: Template
+  templates:
+    template:
+      for:
+        do:
+          doType: DoEdits
+          edits:
+            edits:
+              - action: Upsert
+                kind: olm.variable.bundle
+                params:
+                  properties:
+                    olm.bundle.id: '{{ bundle.BundleID }}'
+                    olm.bundle.image: '{{ bundle.BundlePath }}'
+                    olm.gvk.provided: '{{ bundle.ProvidedApis }}'
+                    olm.gvk.required: '{{ bundle.RequiredApis }}'
+                    olm.package.name: '{{ bundle.PackageName }}'
+                    olm.package.required: '{{ bundle.PackageDependencies }}'
+                    olm.package.version: '{{ bundle.Version }}'
+                type: VariableEdit
+                variableId: olm-bundle/{{ bundle.BundleID }}
+        query: '{{ getBundlesForPackage(curVar.Property("olm.package.name"), curVar.Property("olm.package.version"),
+          curVar.Property("olm.package.channel")) }}'
+        variable: bundle
+---
+id: required-package/:bundle-dependencies
+kindFilter: olm.variable.bundle
+task:
+  edits:
+    edits:
+      - action: Add
+        constraintId: required-package/{{ curVar.Property("olm.package.name") }}
+        constraintType: Dependency
+        kind: olm.variable.required-package
+        params:
+          dependentVariableId: '{{ curVar.VariableID }}'
+        type: ConstraintEdit
+        variableId: required-package/{{ curVar.Property("olm.package.name") }}
+  taskType: EditTask
+---
+id: bundle/:bundle-dependencies
+kindFilter: olm.variable.bundle
+task:
+  taskType: Template
+  templates:
+    template:
+      for:
+        do:
+          doType: DoFor
+          for:
+            do:
+              doType: DoEdits
+              edits:
+                edits:
+                  - action: Upsert
+                    kind: olm.variable.bundle
+                    params:
+                      properties:
+                        olm.bundle.id: '{{ bundle.BundleID }}'
+                        olm.bundle.image: '{{ bundle.BundlePath }}'
+                        olm.gvk.provided: '{{ bundle.ProvidedApis }}'
+                        olm.gvk.required: '{{ bundle.RequiredApis }}'
+                        olm.package.name: '{{ bundle.PackageName }}'
+                        olm.package.required: '{{ bundle.PackageDependencies }}'
+                        olm.package.version: '{{ bundle.Version }}'
+                    type: VariableEdit
+                    variableId: olm-bundle/{{ bundle.BundleID }}
+                  - action: Add
+                    constraintId: required-package/{{ bundle.PackageName }}
+                    constraintType: Dependency
+                    kind: olm.variable.bundle
+                    params:
+                      dependentVariableId: olm-bundle/{{ bundle.BundleID }}
+                    type: ConstraintEdit
+                    variableId: '{{ curVar.VariableID }}'
+            query: '{{ getBundlesForPackage(packageDependency.PackageName, packageDependency.Version,
+              "") }}'
+            variable: bundle
+        query: '{{ curVar.Property("olm.package.required") }}'
+        variable: packageDependency
+---
+id: bundle/:gvk-dependencies
+kindFilter: olm.variable.bundle
+task:
+  taskType: Template
+  templates:
+    template:
+      for:
+        do:
+          doType: DoFor
+          for:
+            do:
+              doType: DoEdits
+              edits:
+                edits:
+                  - action: Upsert
+                    kind: olm.variable.bundle
+                    params:
+                      properties:
+                        olm.bundle.id: '{{ bundle.BundleID }}'
+                        olm.bundle.image: '{{ bundle.BundlePath }}'
+                        olm.gvk.provided: '{{ bundle.ProvidedApis }}'
+                        olm.gvk.required: '{{ bundle.RequiredApis }}'
+                        olm.package.name: '{{ bundle.PackageName }}'
+                        olm.package.required: '{{ bundle.PackageDependencies }}'
+                        olm.package.version: '{{ bundle.Version }}'
+                    type: VariableEdit
+                    variableId: olm-bundle/{{ bundle.BundleID }}
+                  - action: Add
+                    constraintId: required-gvk/{{ gvk.Group }}:{{ gvk.Version }}:{{
+                      gvk.Kind }}
+                    constraintType: Dependency
+                    kind: olm.variable.bundle
+                    params:
+                      dependentVariableId: olm-bundle/{{ bundle.BundleID }}
+                    type: ConstraintEdit
+                    variableId: '{{ curVar.VariableID }}'
+            query: '{{ getBundlesForGVK(gvk.Group, gvk.Version, gvk.Kind) }}'
+            variable: bundle
+        query: '{{ curVar.Property("olm.gvk.required") }}'
+        variable: gvk
+---
+id: uniqueness/:package
+kindFilter: olm.variable.bundle
+task:
+  edits:
+    edits:
+      - action: Upsert
+        kind: olm.variable.uniqueness
+        type: VariableEdit
+        variableId: package-uniqueness
+      - action: Add
+        constraintId: package-uniqueness/{{ curVar.Property("olm.package.name") }}
+        constraintType: AtMost
+        kind: olm.variable.uniqueness
+        params:
+          "n": 1
+          variableId: '{{ curVar.VariableID }}'
+        type: ConstraintEdit
+        variableId: package-uniqueness
+  taskType: EditTask
+---
+id: uniqueness/:gvk
+kindFilter: olm.variable.bundle
+task:
+  taskType: Template
+  templates:
+    template:
+      for:
+        do:
+          doType: DoEdits
+          edits:
+            edits:
+              - action: Upsert
+                kind: olm.variable.uniqueness
+                type: VariableEdit
+                variableId: gvk-uniqueness
+              - action: Add
+                constraintId: gvk-uniqueness/{{ gvk.Group }}:{{ gvk.Version }}:{{
+                  gvk.Kind }}
+                constraintType: AtMost
+                kind: olm.variable.uniqueness
+                params:
+                  "n": 1
+                  variableId: '{{ curVar.VariableID }}'
+                type: ConstraintEdit
+                variableId: gvk-uniqueness
+        query: '{{ curVar.Property("olm.gvk.provided") }}'
+        variable: gvk

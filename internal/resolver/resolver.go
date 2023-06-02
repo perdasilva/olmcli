@@ -51,6 +51,11 @@ func (rs *resolution) GetVariables(ctx context.Context, entitySource input.Entit
 	}
 	variables := make([]deppy.Variable, 0, len(rs.variables))
 	for _, v := range rs.variables {
+		for _, c := range v.VarConstraints {
+			if err := c.Sort(); err != nil {
+				return nil, err
+			}
+		}
 		variables = append(variables, v)
 	}
 	return variables, nil
@@ -151,6 +156,9 @@ func (rs *resolution) gatherVariables(ctx context.Context) error {
 			err := source.Update(ctx, rs, curVar)
 			if IsFatalError(err) {
 				return err
+			}
+			if err != nil {
+				fmt.Println(err)
 			}
 			// todo: add warning log
 		}

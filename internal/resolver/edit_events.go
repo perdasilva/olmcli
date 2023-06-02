@@ -18,13 +18,13 @@ const (
 )
 
 type Edit struct {
-	Type           string                 `yaml:"type"`
-	Action         string                 `yaml:"action"`
-	VariableID     string                 `yaml:"variableId"`
-	Kind           string                 `yaml:"kind"`
-	ConstraintID   string                 `yaml:"constraintId,omitempty"`
-	ConstraintType string                 `yaml:"constraintType,omitempty"`
-	Params         map[string]interface{} `yaml:"params,omitempty"`
+	Type           string                 `json:"type"`
+	Action         string                 `json:"action"`
+	VariableID     string                 `json:"variableId"`
+	Kind           string                 `json:"kind"`
+	ConstraintID   string                 `json:"constraintId,omitempty"`
+	ConstraintType string                 `json:"constraintType,omitempty"`
+	Params         map[string]interface{} `json:"params,omitempty"`
 }
 
 func (e *Edit) Execute(resolution Resolution) error {
@@ -72,21 +72,68 @@ func (e *Edit) Execute(resolution Resolution) error {
 				}
 				variable.AddConflict(*conflictingVariable)
 			} else if e.ConstraintType == ConstraintTypeDependency {
-				dependentVariable, err := resolution.GetVariable(e.Params["dependentVariableId"].(string))
-				if err != nil {
-					return err
+				if e.Params["dependentVariableId"] != nil {
+					dependentVariable, err := resolution.GetVariable(e.Params["dependentVariableId"].(string))
+					if err != nil {
+						return err
+					}
+					if err := variable.AddDependency(e.ConstraintID, *dependentVariable); err != nil {
+						return err
+					}
 				}
-				if err := variable.AddDependency(e.ConstraintID, *dependentVariable); err != nil {
-					return err
+				if e.Params["orderPreference"] != nil {
+					orderPreference := e.Params["orderPreference"].(string)
+					if err != nil {
+						return err
+					}
+					if err := variable.AddDependencySort(e.ConstraintID, orderPreference); err != nil {
+						return err
+					}
 				}
 			} else if e.ConstraintType == ConstraintTypeAtMost {
-				n := e.Params["n"].(int)
-				dependentVariable, err := resolution.GetVariable(e.Params["variableId"].(string))
-				if err != nil {
-					return err
+				if e.Params["n"] != nil {
+					var n int
+					switch t := e.Params["n"].(type) {
+					case float64:
+						n = int(t)
+					case int:
+						n = t
+					case int64:
+						n = int(t)
+					case int32:
+						n = int(t)
+					case int16:
+						n = int(t)
+					case int8:
+						n = int(t)
+					case float32:
+						n = int(t)
+					default:
+						return fmt.Errorf("unknown type for n: %T", t)
+					}
+					if err := variable.AddAtMostN(e.ConstraintID, n); err != nil {
+						return err
+					}
 				}
-				if err := variable.AddAtMost(e.ConstraintID, n, *dependentVariable); err != nil {
-					return err
+
+				if e.Params["variableId"] != nil {
+					dependentVariable, err := resolution.GetVariable(e.Params["variableId"].(string))
+					if err != nil {
+						return err
+					}
+					if err := variable.AddAtMostVariable(e.ConstraintID, *dependentVariable); err != nil {
+						return err
+					}
+				}
+
+				if e.Params["orderPreference"] != nil {
+					orderPreference := e.Params["orderPreference"].(string)
+					if err != nil {
+						return err
+					}
+					if err := variable.AddAtMostSort(e.ConstraintID, orderPreference); err != nil {
+						return err
+					}
 				}
 			} else {
 				return fmt.Errorf("unknown constraint type: %s", e.ConstraintType)
@@ -99,6 +146,10 @@ func (e *Edit) Execute(resolution Resolution) error {
 			} else if e.ConstraintType == ConstraintTypeConflict {
 				variable.RemoveConflict(e.Params["conflicting_variable_id"].(string))
 			} else if e.ConstraintType == ConstraintTypeDependency {
+				if e.Params["dependent_variable_id"] == "" || e.Params["dependent_variable_id"] == nil {
+					variable.RemoveConstraint(e.ConstraintID)
+					return nil
+				}
 				dependentVariable, err := resolution.GetVariable(e.Params["dependent_variable_id"].(string))
 				if err != nil {
 					return err
@@ -107,6 +158,10 @@ func (e *Edit) Execute(resolution Resolution) error {
 					return err
 				}
 			} else if e.ConstraintType == ConstraintTypeAtMost {
+				if e.Params["variableId"] == "" || e.Params["variableId"] == nil {
+					variable.RemoveConstraint(e.ConstraintID)
+					return nil
+				}
 				variable, err := resolution.GetVariable(e.Params["variableId"].(string))
 				if err != nil {
 					return err
@@ -167,19 +222,16 @@ func (e *Edit) validate() error {
 
 	switch e.ConstraintType {
 	case ConstraintTypeAtMost:
-		if _, ok := e.Params["n"]; !ok && e.Action == ActionAdd {
-			return fmt.Errorf("missing parameter n")
-		}
-		if _, ok := e.Params["variableId"]; !ok {
-			return fmt.Errorf("missing parameter variableId")
+		if e.Params == nil {
+			return fmt.Errorf("missing parameters")
 		}
 	case ConstraintTypeConflict:
 		if _, ok := e.Params["conflictingVariableId"]; !ok {
 			return fmt.Errorf("missing parameter conflictingVariableId")
 		}
 	case ConstraintTypeDependency:
-		if _, ok := e.Params["dependentVariableId"]; !ok {
-			return fmt.Errorf("missing parameter dependentVariableId")
+		if e.Params == nil {
+			return fmt.Errorf("missing parameters")
 		}
 	}
 
