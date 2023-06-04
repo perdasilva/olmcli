@@ -291,63 +291,66 @@ func variablesInPreferenceOrder(variables map[deppy.Identifier]Variable, orderPr
 	for _, v := range variables {
 		vars = append(vars, v)
 	}
-	program, err := expr.Compile(sortFn, expr.AsBool())
-	if err != nil {
-		return nil, FatalError(fmt.Sprintf("failed to compile preference order function: %s", err))
-	}
-	var outerError error
-	sort.Slice(vars, func(i, j int) bool {
-		result, err := expr.Run(program, map[string]interface{}{
-			"v1": vars[i],
-			"v2": vars[j],
-			"semverCompare": func(a string, b string) (int, error) {
-				left, err := semver.Parse(a)
-				if err != nil {
-					return 0, err
-				}
-				right, err := semver.Parse(b)
-				if err != nil {
-					return 0, err
-				}
-				if left.GT(right) {
-					return 1, nil
-				}
-				if left.LT(right) {
-					return -1, nil
-				}
-				return 0, nil
-			},
-			"weightedCompare": func(prefOrder []interface{}, a string, b string) (int, error) {
-				wA := 0
-				wB := 0
-				for i, pref := range prefOrder {
-					if pref == a {
-						wA = i + 1
-					}
-					if pref == b {
-						wB = i + 1
-					}
-				}
-				return wA - wB, nil
-			},
-			"multiSort": func(cmp ...int) (int, error) {
-				for _, fn := range cmp {
-					if fn != 0 {
-						return fn, nil
-					}
-				}
-				return 0, nil
-			},
-		})
-		if err != nil {
-			outerError = FatalError(fmt.Sprintf("failed to run preference order function: %s", err))
-			return false
-		}
-		return result.(bool)
-	})
 
-	if outerError != nil {
-		return nil, outerError
+	if sortFn != "" {
+		program, err := expr.Compile(sortFn, expr.AsBool())
+		if err != nil {
+			return nil, FatalError(fmt.Sprintf("failed to compile preference order function: %s", err))
+		}
+		var outerError error
+		sort.Slice(vars, func(i, j int) bool {
+			result, err := expr.Run(program, map[string]interface{}{
+				"v1": vars[i],
+				"v2": vars[j],
+				"semverCompare": func(a string, b string) (int, error) {
+					left, err := semver.Parse(a)
+					if err != nil {
+						return 0, err
+					}
+					right, err := semver.Parse(b)
+					if err != nil {
+						return 0, err
+					}
+					if left.GT(right) {
+						return 1, nil
+					}
+					if left.LT(right) {
+						return -1, nil
+					}
+					return 0, nil
+				},
+				"weightedCompare": func(prefOrder []interface{}, a string, b string) (int, error) {
+					wA := 0
+					wB := 0
+					for i, pref := range prefOrder {
+						if pref == a {
+							wA = i + 1
+						}
+						if pref == b {
+							wB = i + 1
+						}
+					}
+					return wA - wB, nil
+				},
+				"multiSort": func(cmp ...int) (int, error) {
+					for _, fn := range cmp {
+						if fn != 0 {
+							return fn, nil
+						}
+					}
+					return 0, nil
+				},
+			})
+			if err != nil {
+				outerError = FatalError(fmt.Sprintf("failed to run preference order function: %s", err))
+				return false
+			}
+			return result.(bool)
+		})
+
+		if outerError != nil {
+			return nil, outerError
+		}
 	}
 
 	varIds := make([]deppy.Identifier, 0, len(vars))

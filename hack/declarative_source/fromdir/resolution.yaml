@@ -14,7 +14,6 @@ task:
           properties:
             olm.package.name: instana-agent-operator
             olm.package.version: <=2.0.5
-            olm.package.channel: stable
   taskType: EditTask
 ---
 id: required-package/:add-mandatory

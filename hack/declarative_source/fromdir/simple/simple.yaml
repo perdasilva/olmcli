@@ -1,0 +1,27 @@
+id: required-package/instana-agent-operator # unique source id
+kindFilter: ""
+task:
+  editTask:
+    edits:
+      - type: VariableEdit
+        action: Add
+        variableId: a
+        kind: thing
+      - type: VariableEdit
+        action: Add
+        variableId: b
+        kind: thing
+      - type: ConstraintEdit
+        action: Add
+        variableId: a
+        kind: thing
+        constraintId: b
+        constraintType: Dependency
+        params:
+          dependentVariableId: b
+      - type: ConstraintEdit
+        action: Add
+        variableId: a
+        kind: thing
+        constraintType: Mandatory
+  taskType: EditTask

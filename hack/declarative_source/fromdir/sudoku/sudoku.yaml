@@ -1,0 +1,32 @@
+id: sudoku-cells
+kindFilter: ""
+task:
+  taskType: Template
+  templateTask:
+    template:
+      for:
+        query: '{{ rangeStr(0, 9) }}'
+        variable: row
+        do:
+          doType: DoFor
+          for:
+            query: '{{ rangeStr(0, 9) }}'
+            variable: col
+            do:
+              doType: DoFor
+              for:
+                query: '{{ rangeStr(0, 9) }}'
+                variable: num
+                do:
+                  doType: DoEdits
+                  edits:
+                    edits:
+                      - action: Upsert
+                        kind: cell
+                        params:
+                          properties:
+                            row: '{{ row }}'
+                            col: '{{ col }}'
+                            num: '{{ num }}'
+                        type: VariableEdit
+                        variableId: '{{ row }}:{{ col }}:{{ num }}'

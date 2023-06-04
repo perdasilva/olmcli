@@ -11,6 +11,7 @@ task:
           olm.bundle.id: catalog/instana-agent-operator/stable/instana-agent-operator.v2.0.1
           olm.package.name: instana-agent-operator
           olm.package.version: 2.0.1
+          olm.package.channel: stable
       type: VariableEdit
       variableId: installed-package/instana-agent-operator
   taskType: EditTask
@@ -58,4 +59,3 @@ task:
               variableId: 'installed-package/{{ bundle.PackageName }}'
         query: '{{ getUpgradeBundles(curVar.Property("olm.bundle.id")) }}'
         variable: bundle
-

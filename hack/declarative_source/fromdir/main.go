@@ -32,7 +32,7 @@ func main() {
 		panic(err)
 	}
 
-	variableSources, err := resolver.FromDir("hack/declarative_source/fromdir", DB)
+	variableSources, err := resolver.FromDir("hack/declarative_source/fromdir/sudoku", DB)
 	if err != nil {
 		log.Fatal(err)
 	}

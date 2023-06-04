@@ -8,7 +8,6 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/boltdb/bolt v1.3.1
 	github.com/ghodss/yaml v1.0.0
-	github.com/google/uuid v1.2.0
 	github.com/jedib0t/go-pretty/v6 v6.4.6
 	github.com/operator-framework/deppy v0.0.0-20230419145848-9a7655cd364b
 	github.com/operator-framework/operator-registry v1.26.2
@@ -16,8 +15,6 @@ require (
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.14.0
-	github.com/stretchr/testify v1.8.1
-	github.com/wk8/go-ordered-map v1.0.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.26.1
 	sigs.k8s.io/controller-runtime v0.14.4
@@ -55,7 +52,6 @@ require (
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/spf13/afero v1.9.2 // indirect
 	github.com/spf13/cast v1.5.0 // indirect

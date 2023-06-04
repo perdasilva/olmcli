@@ -188,6 +188,13 @@ func (d *DeclarativeVariableSource) collectEdits(ctx context.Context, variable *
 			}
 			return out, nil
 		},
+		"rangeStr": func(start, end int) []string {
+			out := make([]string, end-start)
+			for i := start; i < end; i++ {
+				out[i-start] = fmt.Sprintf("%d", i)
+			}
+			return out
+		},
 	}
 
 	if d.Task.TaskType == TaskTypeEdits {
@@ -316,7 +323,7 @@ func (et *EditTask) runExpression(expression string, env map[string]interface{})
 }
 
 func (et *EditTask) applyTemplateToString(input string, env map[string]interface{}) (interface{}, error) {
-	re := regexp.MustCompile(`^{{.*}}$`)
+	re := regexp.MustCompile(`^\{\{[^{}]*\}\}$`)
 	if re.MatchString(input) {
 		return et.runExpression(input, env)
 	}
@@ -335,7 +342,7 @@ func (et *EditTask) applyTemplateToString(input string, env map[string]interface
 		}
 		switch o := out.(type) {
 		case string:
-			return o
+			return fmt.Sprintf("%s", o)
 		default:
 			outerErr = FatalError(fmt.Sprintf("template must return string, got %T", o))
 			return ""
