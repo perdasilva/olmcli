@@ -152,14 +152,14 @@ func (d *DependencyConstraint) ConstraintID() string {
 }
 
 func (d *DependencyConstraint) MarshalJSON() ([]byte, error) {
-	depIds := make([]string, 0, len(d.dependencies))
-	for id := range d.dependencies {
-		depIds = append(depIds, id.String())
+	depIds, err := variablesInPreferenceOrder(d.dependencies, d.orderPreference)
+	if err != nil {
+		return nil, err
 	}
 	return json.Marshal(&struct {
-		ID            string   `json:"id"`
-		Kind          string   `json:"kind"`
-		DependencyIDs []string `json:"dependencyIDs"`
+		ID            string             `json:"id"`
+		Kind          string             `json:"kind"`
+		DependencyIDs []deppy.Identifier `json:"dependencyIDs"`
 	}{
 		ID:            d.ConstraintID(),
 		Kind:          d.Kind(),
@@ -238,15 +238,15 @@ func (a *AtMostConstraint) Sort() error {
 }
 
 func (a *AtMostConstraint) MarshalJSON() ([]byte, error) {
-	varIds := make([]string, 0, len(a.variables))
-	for id := range a.variables {
-		varIds = append(varIds, id.String())
+	varIds, err := variablesInPreferenceOrder(a.variables, a.orderPreference)
+	if err != nil {
+		return nil, err
 	}
 	return json.Marshal(&struct {
-		ID        string   `json:"id"`
-		Kind      string   `json:"kind"`
-		N         int      `json:"n"`
-		Variables []string `json:"variableIDs"`
+		ID        string             `json:"id"`
+		Kind      string             `json:"kind"`
+		N         int                `json:"n"`
+		Variables []deppy.Identifier `json:"variableIDs"`
 	}{
 		ID:        a.ConstraintID(),
 		Kind:      a.Kind(),
@@ -314,6 +314,27 @@ func variablesInPreferenceOrder(variables map[deppy.Identifier]Variable, orderPr
 				}
 				if left.LT(right) {
 					return -1, nil
+				}
+				return 0, nil
+			},
+			"weightedCompare": func(prefOrder []interface{}, a string, b string) (int, error) {
+				wA := 0
+				wB := 0
+				for i, pref := range prefOrder {
+					if pref == a {
+						wA = i + 1
+					}
+					if pref == b {
+						wB = i + 1
+					}
+				}
+				return wA - wB, nil
+			},
+			"multiSort": func(cmp ...int) (int, error) {
+				for _, fn := range cmp {
+					if fn != 0 {
+						return fn, nil
+					}
 				}
 				return 0, nil
 			},

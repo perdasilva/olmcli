@@ -1,0 +1,61 @@
+---
+id: bundle/:installed
+kindFilter: ""
+task:
+  editTask:
+    edits:
+    - action: Add
+      kind: olm.variable.installed-package
+      params:
+        properties:
+          olm.bundle.id: catalog/instana-agent-operator/stable/instana-agent-operator.v2.0.1
+          olm.package.name: instana-agent-operator
+          olm.package.version: 2.0.1
+      type: VariableEdit
+      variableId: installed-package/instana-agent-operator
+  taskType: EditTask
+
+---
+id: bundle/:upgrades
+kindFilter: olm.variable.installed-package
+task:
+  taskType: Template
+  templateTask:
+    template:
+      for:
+        do:
+          doType: DoEdits
+          edits:
+            edits:
+            - action: Upsert
+              kind: olm.variable.bundle
+              params:
+                properties:
+                  olm.bundle.id: '{{ bundle.BundleID }}'
+                  olm.bundle.image: '{{ bundle.BundlePath }}'
+                  olm.gvk.provided: '{{ bundle.ProvidedApis }}'
+                  olm.gvk.required: '{{ bundle.RequiredApis }}'
+                  olm.package.channel: '{{ bundle.ChannelName }}'
+                  olm.package.defaultChannel: '{{ bundle.DefaultChannelName }}'
+                  olm.package.name: '{{ bundle.PackageName }}'
+                  olm.package.required: '{{ bundle.PackageDependencies }}'
+                  olm.package.version: '{{ bundle.Version }}'
+              type: VariableEdit
+              variableId: 'olm-bundle/{{ bundle.BundleID }}'
+            - action: Add
+              constraintId: 'package/upgrade/{{ bundle.PackageName }}'
+              constraintType: Dependency
+              kind: '{{ curVar.Kind() }}'
+              params:
+                dependentVariableId: 'olm-bundle/{{ bundle.BundleID }}'
+                orderPreference: 'semverCompare(v1.Properties["olm.package.version"], v2.Properties["olm.package.version"]) > 0'
+              type: ConstraintEdit
+              variableId: '{{ curVar.VariableID }}'
+            - action: Add
+              constraintType: Mandatory
+              kind: '{{ curVar.Kind() }}'
+              type: ConstraintEdit
+              variableId: 'installed-package/{{ bundle.PackageName }}'
+        query: '{{ getUpgradeBundles(curVar.Property("olm.bundle.id")) }}'
+        variable: bundle
+

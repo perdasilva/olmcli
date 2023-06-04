@@ -158,7 +158,7 @@ func (rs *resolution) gatherVariables(ctx context.Context) error {
 				return err
 			}
 			if err != nil {
-				fmt.Println(err)
+				fmt.Printf("WARNING: %v\n", err)
 			}
 			// todo: add warning log
 		}

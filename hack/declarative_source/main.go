@@ -1,14 +1,11 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path"
 
-	"github.com/operator-framework/deppy/pkg/deppy/solver"
+	"github.com/ghodss/yaml"
 	"github.com/perdasilva/olmcli/internal/resolver"
 	"github.com/perdasilva/olmcli/internal/store"
 	"github.com/sirupsen/logrus"
@@ -40,11 +37,89 @@ func main() {
 					Type:       resolver.EditTypeVariable,
 					Action:     resolver.ActionAdd,
 					Kind:       "olm.variable.required-package",
-					VariableID: "required-package/kuadrant-operator",
+					VariableID: "required-package/instana-agent-operator",
 					Params: map[string]interface{}{
 						"properties": map[string]interface{}{
-							"olm.package.name":    "kuadrant-operator",
-							"olm.package.version": ">0.0.0",
+							"olm.package.name":    "instana-agent-operator",
+							"olm.package.version": "<=2.0.5",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	installedPackageSource := resolver.Task{
+		TaskType: resolver.TaskTypeEdits,
+		EditTask: &resolver.EditTask{
+			Edits: []resolver.Edit{
+				{
+					Type:       resolver.EditTypeVariable,
+					Action:     resolver.ActionAdd,
+					Kind:       "olm.variable.installed-package",
+					VariableID: "installed-package/instana-agent-operator",
+					Params: map[string]interface{}{
+						"properties": map[string]interface{}{
+							"olm.package.name":    "instana-agent-operator",
+							"olm.package.version": "2.0.1",
+							"olm.bundle.id":       "catalog/instana-agent-operator/stable/instana-agent-operator.v2.0.1",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	installedPackageUpgradeSource := resolver.Task{
+		TaskType: resolver.TaskTypeTemplate,
+		TemplateTask: &resolver.TemplateTask{
+			Template: resolver.Template{
+				ForLoop: resolver.ForLoop{
+					Variable: "bundle",
+					Query:    `{{ getUpgradeBundles(curVar.Property("olm.bundle.id")) }}`,
+					Do: resolver.Do{
+						DoType: resolver.DoTypeEdits,
+						EditTask: &resolver.EditTask{
+							Edits: []resolver.Edit{
+								{
+									Type:       resolver.EditTypeVariable,
+									Action:     resolver.ActionUpsert,
+									Kind:       "olm.variable.bundle",
+									VariableID: "olm-bundle/{{ bundle.BundleID }}",
+									Params: map[string]interface{}{
+										"properties": map[string]interface{}{
+											"olm.package.name":           "{{ bundle.PackageName }}",
+											"olm.package.version":        "{{ bundle.Version }}",
+											"olm.package.channel":        "{{ bundle.ChannelName }}",
+											"olm.package.defaultChannel": "{{ bundle.DefaultChannelName }}",
+											"olm.bundle.id":              "{{ bundle.BundleID }}",
+											"olm.bundle.image":           "{{ bundle.BundlePath }}",
+											"olm.package.required":       "{{ bundle.PackageDependencies }}",
+											"olm.gvk.required":           "{{ bundle.RequiredApis }}",
+											"olm.gvk.provided":           "{{ bundle.ProvidedApis }}",
+										},
+									},
+								},
+								{
+									Type:           resolver.EditTypeConstraint,
+									Action:         resolver.ActionAdd,
+									ConstraintID:   `package/upgrade/{{ bundle.PackageName }}`,
+									ConstraintType: resolver.ConstraintTypeDependency,
+									Kind:           `{{ curVar.Kind() }}`,
+									VariableID:     `{{ curVar.VariableID }}`,
+									Params: map[string]interface{}{
+										"dependentVariableId": "olm-bundle/{{ bundle.BundleID }}",
+										"orderPreference":     `semverCompare(v1.Properties["olm.package.version"], v2.Properties["olm.package.version"]) > 0`,
+									},
+								},
+								{
+									Type:           resolver.EditTypeConstraint,
+									Action:         resolver.ActionAdd,
+									Kind:           `{{ curVar.Kind() }}`,
+									ConstraintType: resolver.ConstraintTypeMandatory,
+									VariableID:     "installed-package/{{ bundle.PackageName }}",
+								},
+							},
 						},
 					},
 				},
@@ -85,13 +160,15 @@ func main() {
 									VariableID: "olm-bundle/{{ bundle.BundleID }}",
 									Params: map[string]interface{}{
 										"properties": map[string]interface{}{
-											"olm.package.name":     "{{ bundle.PackageName }}",
-											"olm.package.version":  "{{ bundle.Version }}",
-											"olm.bundle.id":        "{{ bundle.BundleID }}",
-											"olm.bundle.image":     "{{ bundle.BundlePath }}",
-											"olm.package.required": "{{ bundle.PackageDependencies }}",
-											"olm.gvk.required":     "{{ bundle.RequiredApis }}",
-											"olm.gvk.provided":     "{{ bundle.ProvidedApis }}",
+											"olm.package.name":           "{{ bundle.PackageName }}",
+											"olm.package.version":        "{{ bundle.Version }}",
+											"olm.package.channel":        "{{ bundle.ChannelName }}",
+											"olm.package.defaultChannel": "{{ bundle.DefaultChannelName }}",
+											"olm.bundle.id":              "{{ bundle.BundleID }}",
+											"olm.bundle.image":           "{{ bundle.BundlePath }}",
+											"olm.package.required":       "{{ bundle.PackageDependencies }}",
+											"olm.gvk.required":           "{{ bundle.RequiredApis }}",
+											"olm.gvk.provided":           "{{ bundle.ProvidedApis }}",
 										},
 									},
 								},
@@ -146,13 +223,15 @@ func main() {
 											VariableID: "olm-bundle/{{ bundle.BundleID }}",
 											Params: map[string]interface{}{
 												"properties": map[string]interface{}{
-													"olm.package.name":     "{{ bundle.PackageName }}",
-													"olm.package.version":  "{{ bundle.Version }}",
-													"olm.bundle.id":        "{{ bundle.BundleID }}",
-													"olm.bundle.image":     "{{ bundle.BundlePath }}",
-													"olm.package.required": "{{ bundle.PackageDependencies }}",
-													"olm.gvk.required":     "{{ bundle.RequiredApis }}",
-													"olm.gvk.provided":     "{{ bundle.ProvidedApis }}",
+													"olm.package.name":           "{{ bundle.PackageName }}",
+													"olm.package.version":        "{{ bundle.Version }}",
+													"olm.package.channel":        "{{ bundle.ChannelName }}",
+													"olm.package.defaultChannel": "{{ bundle.DefaultChannelName }}",
+													"olm.bundle.id":              "{{ bundle.BundleID }}",
+													"olm.bundle.image":           "{{ bundle.BundlePath }}",
+													"olm.package.required":       "{{ bundle.PackageDependencies }}",
+													"olm.gvk.required":           "{{ bundle.RequiredApis }}",
+													"olm.gvk.provided":           "{{ bundle.ProvidedApis }}",
 												},
 											},
 										}, {
@@ -164,7 +243,8 @@ func main() {
 											ConstraintID:   "required-package/{{ bundle.PackageName }}",
 											Params: map[string]interface{}{
 												"dependentVariableId": "olm-bundle/{{ bundle.BundleID }}",
-												"orderPreference":     `semverCompare(v1.Properties["olm.package.version"], v2.Properties["olm.package.version"]) > 0`,
+												// "orderPreference":     `semverCompare(v1.Properties["olm.package.version"], v2.Properties["olm.package.version"]) > 0`,
+												"orderPreference": `multiSort(weightedCompare([v1.Properties["olm.package.defaultChannel"]], v1.Properties["olm.package.channel"], v1.Properties["olm.package.channel"]), semverCompare(v1.Properties["olm.package.version"], v2.Properties["olm.package.version"])) > 0`,
 											},
 										},
 									},
@@ -200,13 +280,15 @@ func main() {
 											VariableID: "olm-bundle/{{ bundle.BundleID }}",
 											Params: map[string]interface{}{
 												"properties": map[string]interface{}{
-													"olm.package.name":     "{{ bundle.PackageName }}",
-													"olm.package.version":  "{{ bundle.Version }}",
-													"olm.bundle.id":        "{{ bundle.BundleID }}",
-													"olm.bundle.image":     "{{ bundle.BundlePath }}",
-													"olm.package.required": "{{ bundle.PackageDependencies }}",
-													"olm.gvk.required":     "{{ bundle.RequiredApis }}",
-													"olm.gvk.provided":     "{{ bundle.ProvidedApis }}",
+													"olm.package.name":           "{{ bundle.PackageName }}",
+													"olm.package.version":        "{{ bundle.Version }}",
+													"olm.package.channel":        "{{ bundle.ChannelName }}",
+													"olm.package.defaultChannel": "{{ bundle.DefaultChannelName }}",
+													"olm.bundle.id":              "{{ bundle.BundleID }}",
+													"olm.bundle.image":           "{{ bundle.BundlePath }}",
+													"olm.package.required":       "{{ bundle.PackageDependencies }}",
+													"olm.gvk.required":           "{{ bundle.RequiredApis }}",
+													"olm.gvk.provided":           "{{ bundle.ProvidedApis }}",
 												},
 											},
 										}, {
@@ -303,23 +385,27 @@ func main() {
 		resolver.NewDeclarativeVariableSource("bundle/:gvk-dependencies", "olm.variable.bundle", bundleGVKDependenciesSource, DB),
 		resolver.NewDeclarativeVariableSource("uniqueness/:package", "olm.variable.bundle", packageUniquenessConstraintsSource, DB),
 		resolver.NewDeclarativeVariableSource("uniqueness/:gvk", "olm.variable.bundle", gvkUniquenessConstraintsSource, DB),
+
+		// upgrade edges
+		resolver.NewDeclarativeVariableSource("bundle/:installed", "", installedPackageSource, DB),
+		resolver.NewDeclarativeVariableSource("bundle/:upgrades", "olm.variable.installed-package", installedPackageUpgradeSource, DB),
 	}
 
-	//for _, v := range variableSources {
-	//	j, _ := yaml.Marshal(v)
-	//	fmt.Println(string(j))
-	//}
-
-	resolution := resolver.NewResolution(variableSources...)
-
-	s, _ := solver.NewDeppySolver(nil, resolution)
-	solution, err := s.Solve(context.Background(), solver.AddAllVariablesToSolution())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, v := range solution.SelectedVariables() {
-		j, _ := json.MarshalIndent(v, "", "  ")
+	for _, v := range variableSources {
+		j, _ := yaml.Marshal(v)
 		fmt.Println(string(j))
 	}
+
+	//resolution := resolver.NewResolution(variableSources...)
+	//
+	//s, _ := solver.NewDeppySolver(nil, resolution)
+	//solution, err := s.Solve(context.Background(), solver.AddAllVariablesToSolution())
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//for _, v := range solution.SelectedVariables() {
+	//	j, _ := json.MarshalIndent(v, "", "  ")
+	//	fmt.Println(string(j))
+	//}
 }

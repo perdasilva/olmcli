@@ -17,6 +17,7 @@ require (
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.14.0
 	github.com/stretchr/testify v1.8.1
+	github.com/wk8/go-ordered-map v1.0.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.26.1
 	sigs.k8s.io/controller-runtime v0.14.4

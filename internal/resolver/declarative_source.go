@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/antonmedv/expr"
@@ -159,6 +160,34 @@ func (d *DeclarativeVariableSource) collectEdits(ctx context.Context, variable *
 		"getBundlesForGVK": func(group string, version string, kind string) ([]store.CachedBundle, error) {
 			return d.database.GetBundlesForGVK(context.Background(), group, version, kind)
 		},
+		"getUpgradeBundles": func(bundleId string) ([]store.CachedBundle, error) {
+			oldBundle, err := d.database.GetBundle(context.Background(), bundleId)
+			if err != nil {
+				return nil, err
+			}
+			vRange, err := semver.ParseRange(fmt.Sprintf(">= %s", oldBundle.Version))
+			if err != nil {
+				return nil, err
+			}
+			bundles, err := d.database.GetBundlesForPackage(context.Background(), oldBundle.PackageName, store.InChannel(oldBundle.ChannelName), store.InVersionRange(vRange))
+			if err != nil {
+				return nil, err
+			}
+
+			// Sort bundles by version descending
+			sort.Slice(bundles, func(i, j int) bool {
+				return semver.MustParse(bundles[i].Version).GT(semver.MustParse(bundles[j].Version))
+			})
+
+			out := make([]store.CachedBundle, 0, len(bundles))
+			out = append(out, *oldBundle) // you can always upgrade to yourself
+			for i := 0; i < len(bundles); i++ {
+				if bundles[i].Replaces == oldBundle.CsvName {
+					out = append(out, bundles[i])
+				}
+			}
+			return out, nil
+		},
 	}
 
 	if d.Task.TaskType == TaskTypeEdits {
@@ -167,13 +196,13 @@ func (d *DeclarativeVariableSource) collectEdits(ctx context.Context, variable *
 		return d.Task.TemplateTask.collectEdits(exprEnv)
 	}
 
-	return nil, FatalError(fmt.Sprintf("unknown task type %s", d.Task.TaskType))
+	return nil, FatalError(fmt.Sprintf("unknown task type '%s'", d.Task.TaskType))
 }
 
 type Task struct {
 	TaskType     string        `json:"taskType"`
-	EditTask     *EditTask     `json:"edits,omitempty"`
-	TemplateTask *TemplateTask `json:"templates,omitempty"`
+	EditTask     *EditTask     `json:"editTask,omitempty"`
+	TemplateTask *TemplateTask `json:"templateTask,omitempty"`
 }
 
 type EditTask struct {

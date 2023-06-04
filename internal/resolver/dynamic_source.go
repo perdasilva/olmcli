@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"regexp"
 	"sort"
@@ -132,6 +133,35 @@ func (d *DynamicSource) lazyLoadTemplate() error {
 		},
 		"getBundlesForGVK": func(group string, version string, kind string) ([]store.CachedBundle, error) {
 			return d.repo.GetBundlesForGVK(context.Background(), group, version, kind)
+		},
+		"getUpgradeBundles": func(bundleId string) ([]store.CachedBundle, error) {
+			oldBundle, err := d.repo.GetBundle(context.Background(), bundleId)
+			if err != nil {
+				return nil, err
+			}
+			vRange, err := semver.ParseRange(fmt.Sprintf(">= %s", oldBundle.Version))
+			if err != nil {
+				return nil, err
+			}
+			bundles, err := d.repo.GetBundlesForPackage(context.Background(), oldBundle.PackageName, store.InChannel(oldBundle.ChannelName), store.InVersionRange(vRange))
+			if err != nil {
+				return nil, err
+			}
+
+			// Sort bundles by version descending
+			sort.Slice(bundles, func(i, j int) bool {
+				return semver.MustParse(bundles[i].Version).GT(semver.MustParse(bundles[j].Version))
+			})
+
+			out := make([]store.CachedBundle, 0, len(bundles))
+			out = append(out, *oldBundle) // you can always upgrade to yourself
+			for i := 0; i < len(bundles); i++ {
+				if bundles[i].Replaces == oldBundle.BundleID {
+					out = append(out, bundles[i])
+				}
+			}
+
+			return out, nil
 		},
 	}).Parse(d.Template)
 	if err != nil {

@@ -73,6 +73,9 @@ func (e *Edit) Execute(resolution Resolution) error {
 				variable.AddConflict(*conflictingVariable)
 			} else if e.ConstraintType == ConstraintTypeDependency {
 				if e.Params["dependentVariableId"] != nil {
+					//if e.Params["dependentVariableId"] == "olm-bundle/catalog/instana-agent-operator/stable/instana-agent-operator.v2.0.1" {
+					//	fmt.Println("adding dependency")
+					//}
 					dependentVariable, err := resolution.GetVariable(e.Params["dependentVariableId"].(string))
 					if err != nil {
 						return err
