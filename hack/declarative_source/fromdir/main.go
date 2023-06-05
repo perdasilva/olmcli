@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"path"
+	"strconv"
 
 	"github.com/operator-framework/deppy/pkg/deppy/solver"
 	"github.com/perdasilva/olmcli/internal/resolver"
@@ -39,14 +38,52 @@ func main() {
 
 	resolution := resolver.NewResolution(variableSources...)
 
-	s, _ := solver.NewDeppySolver(nil, resolution)
-	solution, err := s.Solve(context.Background(), solver.AddAllVariablesToSolution())
+	s := solver.NewDeppySolver(nil, resolution)
+	solution, err := s.Solve(context.Background(), solver.AddAllVariablesToSolution(), solver.DisableOrderPreference())
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	board := make([][]int, 9)
+	var vars []resolver.Variable
 	for _, v := range solution.SelectedVariables() {
-		j, _ := json.MarshalIndent(v, "", "  ")
-		fmt.Println(string(j))
+		t := v.(*resolver.Variable)
+		if t.Kind() == "cell" {
+			row, _ := strconv.Atoi(t.Property("row").(string))
+			col, _ := strconv.Atoi(t.Property("col").(string))
+			num, _ := strconv.Atoi(t.Property("num").(string))
+			if board[row] == nil {
+				board[row] = make([]int, 9)
+			}
+			board[row][col] = num + 1
+		} else {
+			vars = append(vars, *t)
+		}
+		//j, _ := json.MarshalIndent(v, "", "  ")
+		//fmt.Println(string(j))
 	}
+
+	//for _, v := range vars {
+	//	println(v.VariableID + ": ")
+	//	dep := v.VarConstraints["num-pick-one"].(*resolver.DependencyConstraint)
+	//	var hasOne bool = false
+	//	for _, c := range dep.Order() {
+	//		isSelected := solution.IsSelected(c)
+	//		hasOne = hasOne || isSelected
+	//		fmt.Printf("%s: %t ", c, isSelected)
+	//	}
+	//	if !hasOne {
+	//		fmt.Printf("No solution found for %s", v.VariableID)
+	//	}
+	//	println()
+	//}
+
+	for _, row := range board {
+		for _, num := range row {
+			print(num, " ")
+		}
+		println()
+	}
+
+	println()
 }

@@ -195,6 +195,9 @@ func (d *DeclarativeVariableSource) collectEdits(ctx context.Context, variable *
 			}
 			return out
 		},
+		"string": func(s interface{}) string {
+			return fmt.Sprintf("%s", s)
+		},
 	}
 
 	if d.Task.TaskType == TaskTypeEdits {
@@ -343,6 +346,8 @@ func (et *EditTask) applyTemplateToString(input string, env map[string]interface
 		switch o := out.(type) {
 		case string:
 			return fmt.Sprintf("%s", o)
+		case int:
+			return fmt.Sprintf("%d", o)
 		default:
 			outerErr = FatalError(fmt.Sprintf("template must return string, got %T", o))
 			return ""

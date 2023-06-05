@@ -10,11 +10,12 @@ const (
 	ActionRemove = "Remove"
 	ActionUpsert = "Upsert"
 
-	ConstraintTypeMandatory  = "Mandatory"
-	ConstraintTypeProhibited = "Prohibited"
-	ConstraintTypeConflict   = "Conflict"
-	ConstraintTypeDependency = "Dependency"
-	ConstraintTypeAtMost     = "AtMost"
+	ConstraintTypeMandatory    = "Mandatory"
+	ConstraintTypeProhibited   = "Prohibited"
+	ConstraintTypeConflict     = "Conflict"
+	ConstraintTypeDependency   = "Dependency"
+	ConstraintTypeUnDependency = "UnDependency"
+	ConstraintTypeAtMost       = "AtMost"
 )
 
 type Edit struct {
@@ -93,6 +94,25 @@ func (e *Edit) Execute(resolution Resolution) error {
 						return err
 					}
 				}
+			} else if e.ConstraintType == ConstraintTypeUnDependency {
+				if e.Params["unDependentVariableId"] != nil {
+					dependentVariable, err := resolution.GetVariable(e.Params["unDependentVariableId"].(string))
+					if err != nil {
+						return err
+					}
+					if err := variable.AddUnDependency(e.ConstraintID, *dependentVariable); err != nil {
+						return err
+					}
+				}
+				if e.Params["orderPreference"] != nil {
+					orderPreference := e.Params["orderPreference"].(string)
+					if err != nil {
+						return err
+					}
+					if err := variable.AddUnDependencySort(e.ConstraintID, orderPreference); err != nil {
+						return err
+					}
+				}
 			} else if e.ConstraintType == ConstraintTypeAtMost {
 				if e.Params["n"] != nil {
 					var n int
@@ -147,17 +167,29 @@ func (e *Edit) Execute(resolution Resolution) error {
 			} else if e.ConstraintType == ConstraintTypeProhibited {
 				variable.RemoveProhibited()
 			} else if e.ConstraintType == ConstraintTypeConflict {
-				variable.RemoveConflict(e.Params["conflicting_variable_id"].(string))
+				variable.RemoveConflict(e.Params["conflictingVariableId"].(string))
 			} else if e.ConstraintType == ConstraintTypeDependency {
-				if e.Params["dependent_variable_id"] == "" || e.Params["dependent_variable_id"] == nil {
+				if e.Params["dependentVariableId"] == "" || e.Params["dependentVariableId"] == nil {
 					variable.RemoveConstraint(e.ConstraintID)
 					return nil
 				}
-				dependentVariable, err := resolution.GetVariable(e.Params["dependent_variable_id"].(string))
+				dependentVariable, err := resolution.GetVariable(e.Params["dependentVariableId"].(string))
 				if err != nil {
 					return err
 				}
 				if err := variable.RemoveDependency(e.ConstraintID, *dependentVariable); err != nil {
+					return err
+				}
+			} else if e.ConstraintType == ConstraintTypeUnDependency {
+				if e.Params["unDependentVariableId"] == "" || e.Params["unDependentVariableId"] == nil {
+					variable.RemoveConstraint(e.ConstraintID)
+					return nil
+				}
+				unDependentVariable, err := resolution.GetVariable(e.Params["unDependentVariableId"].(string))
+				if err != nil {
+					return err
+				}
+				if err := variable.RemoveUnDependency(e.ConstraintID, *unDependentVariable); err != nil {
 					return err
 				}
 			} else if e.ConstraintType == ConstraintTypeAtMost {
@@ -186,11 +218,12 @@ func (e *Edit) validate() error {
 	validTypes := map[string]struct{}{EditTypeVariable: {}, EditTypeConstraint: {}}
 	validActions := map[string]struct{}{ActionAdd: {}, ActionRemove: {}, ActionUpsert: {}}
 	validConstraintTypes := map[string]struct{}{
-		ConstraintTypeAtMost:     {},
-		ConstraintTypeConflict:   {},
-		ConstraintTypeDependency: {},
-		ConstraintTypeMandatory:  {},
-		ConstraintTypeProhibited: {},
+		ConstraintTypeAtMost:       {},
+		ConstraintTypeConflict:     {},
+		ConstraintTypeDependency:   {},
+		ConstraintTypeMandatory:    {},
+		ConstraintTypeProhibited:   {},
+		ConstraintTypeUnDependency: {},
 	}
 
 	if e.VariableID == "" {
@@ -233,6 +266,10 @@ func (e *Edit) validate() error {
 			return fmt.Errorf("missing parameter conflictingVariableId")
 		}
 	case ConstraintTypeDependency:
+		if e.Params == nil {
+			return fmt.Errorf("missing parameters")
+		}
+	case ConstraintTypeUnDependency:
 		if e.Params == nil {
 			return fmt.Errorf("missing parameters")
 		}

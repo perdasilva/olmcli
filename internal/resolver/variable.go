@@ -107,6 +107,30 @@ func (v *Variable) RemoveDependency(constraintID string, dependentVariable Varia
 	return nil
 }
 
+func (v *Variable) AddUnDependency(constraintID string, dependentVariable Variable) error {
+	if _, ok := v.VarConstraints[constraintID]; !ok {
+		v.VarConstraints[constraintID] = UnDependency(constraintID)
+	}
+	c, ok := v.VarConstraints[constraintID].(*UnDependencyConstr)
+	if !ok {
+		return fmt.Errorf("constraint with id %s is not a DependencyConstraint", constraintID)
+	}
+	c.AddUnDependency(dependentVariable)
+	return nil
+}
+
+func (v *Variable) RemoveUnDependency(constraintID string, dependentVariable Variable) error {
+	if _, ok := v.VarConstraints[constraintID]; !ok {
+		return fmt.Errorf("constraint with id %s does not exist", constraintID)
+	}
+	c, ok := v.VarConstraints[constraintID].(*UnDependencyConstr)
+	if !ok {
+		return fmt.Errorf("constraint with id %s is not a Dependency constraint", constraintID)
+	}
+	c.RemoveUnDependency(dependentVariable)
+	return nil
+}
+
 func (v *Variable) RemoveConstraint(constraintID string) {
 	delete(v.VarConstraints, constraintID)
 }
@@ -170,6 +194,21 @@ func (v *Variable) AddDependencySort(constraintID string, orderPreference string
 		v.VarConstraints[constraintID] = AtMost(constraintID, 0)
 	}
 	c, ok := v.VarConstraints[constraintID].(*DependencyConstraint)
+	if !ok {
+		return fmt.Errorf("constraint with id %s is not an AtMost constraint", constraintID)
+	}
+	if c.orderPreference != "" && c.orderPreference != orderPreference {
+		return fmt.Errorf("constraint with id %s already has orderPreference=%s", constraintID, orderPreference)
+	}
+	c.orderPreference = orderPreference
+	return nil
+}
+
+func (v *Variable) AddUnDependencySort(constraintID string, orderPreference string) error {
+	if _, ok := v.VarConstraints[constraintID]; !ok {
+		v.VarConstraints[constraintID] = AtMost(constraintID, 0)
+	}
+	c, ok := v.VarConstraints[constraintID].(*UnDependencyConstr)
 	if !ok {
 		return fmt.Errorf("constraint with id %s is not an AtMost constraint", constraintID)
 	}

@@ -1,3 +1,4 @@
+---
 id: sudoku-cells
 kindFilter: ""
 task:
@@ -30,3 +31,214 @@ task:
                             num: '{{ num }}'
                         type: VariableEdit
                         variableId: '{{ row }}:{{ col }}:{{ num }}'
+---
+id: sudoku-cell-constraints
+kindFilter: "cell"
+task:
+  taskType: EditTask
+  editTask:
+    edits:
+      - type: VariableEdit
+        action: Upsert
+        variableId: 'cell/{{ curVar.Property("row") }}:{{ curVar.Property("col") }}'
+        kind: constraint
+        params:
+          properties:
+            row: '{{ curVar.Property("row") }}'
+            col: '{{ curVar.Property("col") }}'
+      - type: ConstraintEdit
+        variableId: 'cell/{{ curVar.Property("row") }}:{{ curVar.Property("col") }}'
+        kind: constraint
+        action: Add
+        constraintId: 'num-pick-one'
+        constraintType: Dependency
+        params:
+          dependentVariableId: '{{ curVar.VariableID }}'
+      - type: ConstraintEdit
+        variableId: 'cell/{{ curVar.Property("row") }}:{{ curVar.Property("col") }}'
+        kind: constraint
+        action: Add
+        constraintType: Mandatory
+---
+id: sudoku-row-constraints
+kindFilter: "cell"
+task:
+  taskType: EditTask
+  editTask:
+    edits:
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'row-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-1'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ curVar.Property("row") }}:{{ (int(curVar.Property("col")) + 1) % 9 }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'row-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-2'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ curVar.Property("row") }}:{{ (int(curVar.Property("col")) + 2) % 9 }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'row-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-3'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ curVar.Property("row") }}:{{ (int(curVar.Property("col")) + 3) % 9 }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'row-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-4'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ curVar.Property("row") }}:{{ (int(curVar.Property("col")) + 4) % 9 }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'row-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-5'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ curVar.Property("row") }}:{{ (int(curVar.Property("col")) + 5) % 9 }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'row-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-6'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ curVar.Property("row") }}:{{ (int(curVar.Property("col")) + 6) % 9 }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'row-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-7'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ curVar.Property("row") }}:{{ (int(curVar.Property("col")) + 7) % 9 }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'row-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-8'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ curVar.Property("row") }}:{{ (int(curVar.Property("col")) + 8) % 9 }}:{{ curVar.Property("num") }}'
+---
+id: sudoku-col-constraints
+kindFilter: "cell"
+task:
+  taskType: EditTask
+  editTask:
+    edits:
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'col-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-1'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ (int(curVar.Property("row")) + 1) % 9  }}:{{ curVar.Property("col") }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'col-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-2'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ (int(curVar.Property("row")) + 2) % 9 }}:{{ curVar.Property("col") }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'col-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-3'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ (int(curVar.Property("row")) + 3) % 9 }}:{{ curVar.Property("col") }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'col-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-4'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ (int(curVar.Property("row")) + 4) % 9 }}:{{ curVar.Property("col") }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'col-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-5'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ (int(curVar.Property("row")) + 5) % 9 }}:{{ curVar.Property("col") }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'col-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-6'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ (int(curVar.Property("row")) + 6) % 9 }}:{{ curVar.Property("col") }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'col-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-7'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ (int(curVar.Property("row")) + 7) % 9 }}:{{ curVar.Property("col") }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'col-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-8'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ (int(curVar.Property("row")) + 8) % 9 }}:{{ curVar.Property("col") }}:{{ curVar.Property("num") }}'
+---
+id: sudoku-box-constraints
+kindFilter: "cell"
+task:
+  taskType: EditTask
+  editTask:
+    edits:
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'box-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-1'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ ((int(curVar.Property("row")) + 1) % 3) + (3*int(int(curVar.Property("row"))/3)) }}:{{ ((int(curVar.Property("col")) + 1) % 3) + (3*int(int(curVar.Property("col"))/3)) }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'box-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-2'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ ((int(curVar.Property("row")) + 1) % 3) + (3*int(int(curVar.Property("row"))/3)) }}:{{ ((int(curVar.Property("col")) + 2) % 3) + (3*int(int(curVar.Property("col"))/3)) }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'box-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-3'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ ((int(curVar.Property("row")) + 2) % 3) + (3*int(int(curVar.Property("row"))/3)) }}:{{ ((int(curVar.Property("col")) + 1) % 3) + (3*int(int(curVar.Property("col"))/3)) }}:{{ curVar.Property("num") }}'
+      - type: ConstraintEdit
+        variableId: '{{ curVar.VariableID }}'
+        kind: cell
+        action: Add
+        constraintId: 'box-constraint-{{ curVar.Property("row") }}:{{ curVar.Property("col") }}-4'
+        constraintType: Conflict
+        params:
+          conflictingVariableId: '{{ ((int(curVar.Property("row")) + 2) % 3) + (3*int(int(curVar.Property("row"))/3)) }}:{{ ((int(curVar.Property("col")) + 2) % 3) + (3*int(int(curVar.Property("col"))/3)) }}:{{ curVar.Property("num") }}'
+
+

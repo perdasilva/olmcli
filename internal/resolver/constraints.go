@@ -8,6 +8,7 @@ import (
 
 	"github.com/antonmedv/expr"
 	"github.com/blang/semver/v4"
+	"github.com/go-air/gini/z"
 	"github.com/operator-framework/deppy/pkg/deppy"
 	"github.com/operator-framework/deppy/pkg/deppy/constraint"
 )
@@ -22,6 +23,41 @@ const (
 	AtMostConstraintKind     = "olm.constraint.atmost"
 	ConflictConstraintKind   = "olm.constraint.conflict"
 )
+
+type UnDependencyConstraint struct {
+	undependencyIDs []deppy.Identifier
+}
+
+func (constraint *UnDependencyConstraint) String(subject deppy.Identifier) string {
+	if len(constraint.undependencyIDs) == 0 {
+		return fmt.Sprintf("%s has an undependency without any candidates to satisfy it", subject)
+	}
+	s := make([]string, len(constraint.undependencyIDs))
+	for i, each := range constraint.undependencyIDs {
+		s[i] = string(each)
+	}
+	return fmt.Sprintf("%s requires at least one of %s must be false", subject, strings.Join(s, ", "))
+}
+
+func (constraint *UnDependencyConstraint) Apply(lm deppy.LitMapping, subject deppy.Identifier) z.Lit {
+	m := lm.LitOf(subject).Not()
+	for _, each := range constraint.undependencyIDs {
+		m = lm.LogicCircuit().Or(m, lm.LitOf(each).Not())
+	}
+	return m
+}
+
+func (constraint *UnDependencyConstraint) DependencyIDs() []deppy.Identifier {
+	return constraint.undependencyIDs
+}
+
+func (constraint *UnDependencyConstraint) Order() []deppy.Identifier {
+	return constraint.undependencyIDs
+}
+
+func (constraint *UnDependencyConstraint) Anchor() bool {
+	return false
+}
 
 func ConflictConstraintID(conflictingVariableID string) string {
 	return fmt.Sprintf("confict/%s", conflictingVariableID)
@@ -159,7 +195,7 @@ func (d *DependencyConstraint) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		ID            string             `json:"id"`
 		Kind          string             `json:"kind"`
-		DependencyIDs []deppy.Identifier `json:"dependencyIDs"`
+		DependencyIDs []deppy.Identifier `json:"undependencyIDs"`
 	}{
 		ID:            d.ConstraintID(),
 		Kind:          d.Kind(),
@@ -199,6 +235,74 @@ func (d *DependencyConstraint) Sort() error {
 	}
 
 	d.Constraint = constraint.Dependency(depIds...)
+	return nil
+}
+
+var _ Constraint = &UnDependencyConstr{}
+
+type UnDependencyConstr struct {
+	constraintID string
+	deppy.Constraint
+	dependencies    map[deppy.Identifier]Variable
+	orderPreference string
+}
+
+func (d *UnDependencyConstr) Kind() string {
+	return DependencyConstraintKind
+}
+
+func (d *UnDependencyConstr) ConstraintID() string {
+	return d.constraintID
+}
+
+func (d *UnDependencyConstr) MarshalJSON() ([]byte, error) {
+	depIds, err := variablesInPreferenceOrder(d.dependencies, d.orderPreference)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(&struct {
+		ID              string             `json:"id"`
+		Kind            string             `json:"kind"`
+		UnDependencyIDs []deppy.Identifier `json:"undependencyIDs"`
+	}{
+		ID:              d.ConstraintID(),
+		Kind:            d.Kind(),
+		UnDependencyIDs: depIds,
+	})
+}
+
+func UnDependency(constraintID string, dependencies ...Variable) Constraint {
+	deps := make(map[deppy.Identifier]Variable)
+	for _, d := range dependencies {
+		deps[d.Identifier()] = d
+	}
+	return &UnDependencyConstr{constraintID, &UnDependencyConstraint{toIdentifierIDs(deps)}, deps, ""}
+}
+
+func (d *UnDependencyConstr) AddUnDependency(dependentVariable Variable) {
+	if _, ok := d.dependencies[dependentVariable.Identifier()]; !ok {
+		d.dependencies[dependentVariable.Identifier()] = dependentVariable
+		d.Constraint = &UnDependencyConstraint{toIdentifierIDs(d.dependencies)}
+	}
+}
+
+func (d *UnDependencyConstr) RemoveUnDependency(dependentVariable Variable) {
+	if _, ok := d.dependencies[dependentVariable.Identifier()]; ok {
+		delete(d.dependencies, dependentVariable.Identifier())
+		d.Constraint = &UnDependencyConstraint{toIdentifierIDs(d.dependencies)}
+	}
+}
+
+func (d *UnDependencyConstr) Sort() error {
+	if d.orderPreference == "" {
+		return nil
+	}
+	depIds, err := variablesInPreferenceOrder(d.dependencies, d.orderPreference)
+	if err != nil {
+		return err
+	}
+
+	d.Constraint = &UnDependencyConstraint{depIds}
 	return nil
 }
 

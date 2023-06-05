@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"sync"
 
 	"github.com/operator-framework/deppy/pkg/deppy"
@@ -58,6 +59,16 @@ func (rs *resolution) GetVariables(ctx context.Context, entitySource input.Entit
 		}
 		variables = append(variables, v)
 	}
+
+	sort.Slice(variables, func(i, j int) bool {
+		v1 := variables[i].(*Variable).Kind()
+		v2 := variables[j].(*Variable).Kind()
+		if v1 == v2 {
+			return false
+		}
+		return v1 == "constraint"
+	})
+
 	return variables, nil
 }
 
