@@ -19,7 +19,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/perdasilva/olmcli/internal/manager"
+	"github.com/perdasilva/olmcli/pkg/manager"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
