@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/perdasilva/replee/pkg/deppy"
-	"github.com/perdasilva/replee/pkg/deppy/solver"
+	"github.com/perdasilva/olmcli/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy/solver"
 )
 
 // Solution is returned by the Solver when the internal solver executed successfully.

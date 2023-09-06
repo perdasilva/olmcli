@@ -3,8 +3,8 @@ package resolution
 import (
 	"context"
 	"fmt"
-	"github.com/perdasilva/replee/pkg/deppy"
-	s "github.com/perdasilva/replee/pkg/deppy/variable_sources"
+	"github.com/perdasilva/olmcli/pkg/deppy"
+	s "github.com/perdasilva/olmcli/pkg/deppy/variable_sources"
 )
 
 var _ deppy.MutableResolutionProblem = &resolutionProblemBuilder{}

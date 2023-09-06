@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/go-air/gini/inter"
 	"github.com/go-air/gini/z"
-	"github.com/perdasilva/replee/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy"
 )
 
 type choice struct {

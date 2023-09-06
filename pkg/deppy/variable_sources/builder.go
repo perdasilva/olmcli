@@ -2,7 +2,7 @@ package variable_sources
 
 import (
 	"context"
-	"github.com/perdasilva/replee/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy"
 )
 
 type VariableSourceBuilder interface {

@@ -3,9 +3,9 @@ package variables
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/perdasilva/replee/pkg/deppy"
-	"github.com/perdasilva/replee/pkg/deppy/constraints"
-	"github.com/perdasilva/replee/pkg/deppy/utils"
+	"github.com/perdasilva/olmcli/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy/constraints"
+	"github.com/perdasilva/olmcli/pkg/deppy/utils"
 	"reflect"
 	"sync"
 )

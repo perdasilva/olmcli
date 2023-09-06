@@ -1,7 +1,7 @@
 package solver
 
 import (
-	"github.com/perdasilva/replee/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy"
 )
 
 // zeroVariable is returned by VariableOf in error cases.

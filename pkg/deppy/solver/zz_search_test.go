@@ -147,7 +147,7 @@ func (fake *FakeS) Add(arg1 z.Lit) {
 	fake.addArgsForCall = append(fake.addArgsForCall, struct {
 		arg1 z.Lit
 	}{arg1})
-	fake.recordInvocation("Add", []interface{}{arg1})
+	fake.recordInvocation("ConnectInputChannel", []interface{}{arg1})
 	fake.addMutex.Unlock()
 	if fake.AddStub != nil {
 		fake.AddStub(arg1)

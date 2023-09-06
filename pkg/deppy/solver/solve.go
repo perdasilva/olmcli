@@ -7,7 +7,7 @@ import (
 	"github.com/go-air/gini"
 	"github.com/go-air/gini/inter"
 	"github.com/go-air/gini/z"
-	"github.com/perdasilva/replee/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy"
 )
 
 var ErrIncomplete = errors.New("cancelled before a solution could be found")

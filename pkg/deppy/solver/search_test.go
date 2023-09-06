@@ -4,8 +4,8 @@ package solver
 
 import (
 	"context"
-	"github.com/perdasilva/replee/pkg/deppy"
-	"github.com/perdasilva/replee/pkg/deppy/constraints"
+	"github.com/perdasilva/olmcli/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy/constraints"
 	"testing"
 
 	"github.com/go-air/gini/inter"

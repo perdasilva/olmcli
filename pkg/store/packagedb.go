@@ -192,7 +192,7 @@ func NewPackageDatabase(databasePath string, logger *logrus.Logger) (PackageData
 		panic("logger is nil")
 	}
 
-	db, err := bolt.Open(databasePath, 0600, nil)
+	db, err := bolt.Open(databasePath, 0777, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -1,8 +1,8 @@
 package resolution_test
 
 import (
-	"github.com/perdasilva/replee/pkg/deppy/resolution"
-	"github.com/perdasilva/replee/pkg/deppy/variables"
+	"github.com/perdasilva/olmcli/pkg/deppy/resolution"
+	"github.com/perdasilva/olmcli/pkg/deppy/variables"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )

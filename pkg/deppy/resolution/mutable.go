@@ -3,9 +3,9 @@ package resolution
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/perdasilva/replee/pkg/deppy"
-	"github.com/perdasilva/replee/pkg/deppy/utils"
-	"github.com/perdasilva/replee/pkg/deppy/variables"
+	"github.com/perdasilva/olmcli/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy/utils"
+	"github.com/perdasilva/olmcli/pkg/deppy/variables"
 )
 
 var _ deppy.MutableResolutionProblem = &MutableResolutionProblem{}

@@ -2,7 +2,7 @@ package utils_test
 
 import (
 	"encoding/json"
-	. "github.com/perdasilva/replee/pkg/deppy/utils"
+	. "github.com/perdasilva/olmcli/pkg/deppy/utils"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"strings"

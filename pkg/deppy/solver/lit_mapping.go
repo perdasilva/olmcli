@@ -2,7 +2,7 @@ package solver
 
 import (
 	"fmt"
-	"github.com/perdasilva/replee/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy"
 
 	"strings"
 

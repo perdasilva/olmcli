@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-air/gini/z"
-	"github.com/perdasilva/replee/pkg/deppy"
-	"github.com/perdasilva/replee/pkg/deppy/utils"
+	"github.com/perdasilva/olmcli/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy/utils"
 	"strings"
 	"sync"
 )

@@ -2,7 +2,7 @@ package utils
 
 import (
 	"encoding/json"
-	"github.com/perdasilva/replee/pkg/deppy"
+	"github.com/perdasilva/olmcli/pkg/deppy"
 	"reflect"
 	"sort"
 	"sync"
