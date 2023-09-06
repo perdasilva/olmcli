@@ -216,6 +216,63 @@ func (v *MutableVariable) RemoveConflict(constraintID deppy.Identifier) error {
 	return nil
 }
 
+func (v *MutableVariable) AddReverseDependency(constraintID deppy.Identifier, dependentVariableIDs ...deppy.Identifier) error {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+	if _, ok := v.constraints.GetValue(constraintID); !ok {
+		dep := constraints.ReverseDependency(constraintID, dependentVariableIDs...)
+		v.constraints.Put(constraintID, dep)
+		return nil
+	}
+
+	if d, ok := v.constraints.MustGet(constraintID).(*constraints.ReverseDependencyConstraint); !ok {
+		return deppy.FatalError(fmt.Sprintf("constraint with id %s is not a ReverseDependency constraint", constraintID))
+	} else {
+		d.Activate(dependentVariableIDs...)
+	}
+	return nil
+}
+
+func (v *MutableVariable) RemoveReverseDependency(constraintID deppy.Identifier, dependentVariableIDs ...deppy.Identifier) error {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+	if _, ok := v.constraints.GetValue(constraintID); !ok {
+		dep := constraints.ReverseDependency(constraintID)
+		v.constraints.Put(constraintID, dep)
+	}
+
+	if d, ok := v.constraints.MustGet(constraintID).(*constraints.ReverseDependencyConstraint); !ok {
+		return deppy.FatalError(fmt.Sprintf("constraint with id %s is not a ReverseDependency constraint", constraintID))
+	} else {
+		if len(dependentVariableIDs) == 0 {
+			v.constraints.Deactivate(constraintID)
+		} else {
+			for _, dependentVariableID := range dependentVariableIDs {
+				d.Deactivate(dependentVariableID)
+			}
+		}
+	}
+
+	c, _ := v.constraints.GetValue(constraintID)
+	dep, _ := c.(*constraints.DependencyConstraint)
+	for _, dependentVariableID := range dependentVariableIDs {
+		dep.Deactivate(dependentVariableID)
+	}
+	return nil
+}
+
+func (v *MutableVariable) RemoveReverseDependencyConstraint(constraintID deppy.Identifier) error {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+	if c, ok := v.constraints.GetValue(constraintID); !ok {
+		v.constraints.Put(constraintID, constraints.ReverseDependency(constraintID))
+	} else if _, ok := c.(*constraints.ReverseDependencyConstraint); !ok {
+		return deppy.FatalError(fmt.Sprintf("constraint with id %s is not a ReverseDependency constraint", constraintID))
+	}
+	v.constraints.Deactivate(constraintID)
+	return nil
+}
+
 func (v *MutableVariable) AddDependency(constraintID deppy.Identifier, dependentVariableIDs ...deppy.Identifier) error {
 	v.lock.Lock()
 	defer v.lock.Unlock()

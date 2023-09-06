@@ -99,6 +99,9 @@ type MutableVariable interface {
 	AddDependency(constraintID Identifier, variableIDs ...Identifier) error
 	RemoveDependency(constraintID Identifier, variableIDs ...Identifier) error
 
+	AddReverseDependency(constraintID Identifier, variableIDs ...Identifier) error
+	RemoveReverseDependency(constraintID Identifier, variableIDs ...Identifier) error
+
 	// AddDependsOnAny(constraintID Identifier, variableIDs ...Identifier) error
 	// RemoveDependsOnAny(constraintID Identifier, variableIDs ...Identifier) error
 	// AddDependsOnAll(constraintID Identifier, variableIDs ...Identifier) error

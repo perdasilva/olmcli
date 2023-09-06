@@ -11,11 +11,12 @@ import (
 )
 
 const (
-	ConstraintKindMandatory  = "deppy.constraint.mandatory"
-	ConstraintKindProhibited = "deppy.constraint.prohibited"
-	ConstraintKindConflict   = "deppy.constraint.conflict"
-	ConstraintKindDependency = "deppy.constraint.dependency"
-	ConstraintKindAtMost     = "deppy.constraint.atmost"
+	ConstraintKindMandatory         = "deppy.constraint.mandatory"
+	ConstraintKindProhibited        = "deppy.constraint.prohibited"
+	ConstraintKindConflict          = "deppy.constraint.conflict"
+	ConstraintKindDependency        = "deppy.constraint.dependency"
+	ConstraintKindReverseDependency = "deppy.constraint.reverse-dependency"
+	ConstraintKindAtMost            = "deppy.constraint.atmost"
 )
 
 type Constraint deppy.Constraint
@@ -272,6 +273,107 @@ func (constraint *DependencyConstraint) MarshalJSON() ([]byte, error) {
 }
 
 func (constraint *DependencyConstraint) UnmarshalJSON(jsonBytes []byte) error {
+	data := &struct {
+		Kind          string                                 `json:"kind"`
+		Properties    map[string]interface{}                 `json:"properties"`
+		DependencyIDs *utils.ActivationSet[deppy.Identifier] `json:"dependencyIDs"`
+	}{}
+	if err := json.Unmarshal(jsonBytes, data); err != nil {
+		return err
+	}
+	constraint.kind = data.Kind
+	constraint.properties = data.Properties
+	constraint.ActivationSet = data.DependencyIDs
+	return nil
+}
+
+var _ deppy.Constraint = &ReverseDependencyConstraint{}
+
+type ReverseDependencyConstraint struct {
+	MutableConstraintBase
+	*utils.ActivationSet[deppy.Identifier]
+}
+
+func ReverseDependency(constraintID deppy.Identifier, dependencies ...deppy.Identifier) *ReverseDependencyConstraint {
+	c := &ReverseDependencyConstraint{
+		MutableConstraintBase: MutableConstraintBase{
+			constraintID: constraintID,
+			kind:         ConstraintKindDependency,
+			properties:   map[string]interface{}{},
+			lock:         sync.RWMutex{},
+		},
+		ActivationSet: utils.NewActivationSet[deppy.Identifier](),
+	}
+	for _, dependency := range dependencies {
+		c.Activate(dependency)
+	}
+	return c
+}
+
+func (constraint *ReverseDependencyConstraint) Merge(other deppy.Constraint) (bool, error) {
+	changed := false
+	if cc, ok := other.(*DependencyConstraint); ok {
+		if constraint.ActivationSet == nil {
+			constraint.ActivationSet = utils.NewActivationSet[deppy.Identifier]()
+		}
+		ok, err := constraint.ActivationSet.Merge(cc.ActivationSet)
+		if err != nil {
+			return false, err
+		}
+		changed = changed || ok
+	} else if !ok {
+		return false, deppy.ConflictErrorf("cannot merge constraints of different kind [%T != %T]", constraint, other)
+	}
+	ok, err := constraint.MutableConstraintBase.Merge(other)
+	if err != nil {
+		return false, err
+	}
+	return changed || ok, nil
+}
+
+func (constraint *ReverseDependencyConstraint) Apply(lm deppy.LitMapping, subject deppy.Identifier) z.Lit {
+	dependencyIDs := constraint.Elements()
+	m := lm.LitOf(dependencyIDs[0]).Not()
+	for i := 1; i < len(dependencyIDs); i++ {
+		dep := lm.LitOf(dependencyIDs[i])
+		m = lm.LogicCircuit().And(m, dep.Not())
+	}
+	return lm.LogicCircuit().Or(lm.LitOf(subject), m)
+}
+
+func (constraint *ReverseDependencyConstraint) Order() []deppy.Identifier {
+	return constraint.Elements()
+}
+
+func (constraint *ReverseDependencyConstraint) Anchor() bool {
+	return false
+}
+
+func (constraint *ReverseDependencyConstraint) String(subject deppy.Identifier) string {
+	dependencyIDs := constraint.Elements()
+	if len(dependencyIDs) == 0 {
+		return fmt.Sprintf("%s has a ReverseDependencyConstraint without any candidates to satisfy it", subject)
+	}
+	s := make([]string, len(dependencyIDs))
+	for i, each := range dependencyIDs {
+		s[i] = string(each)
+	}
+	return fmt.Sprintf("%s requires at least one of %s", subject, strings.Join(s, ", "))
+}
+
+func (constraint *ReverseDependencyConstraint) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Kind          string                                 `json:"kind"`
+		Properties    map[string]interface{}                 `json:"properties"`
+		DependencyIDs *utils.ActivationSet[deppy.Identifier] `json:"dependencyIDs"`
+	}{
+		Kind:          constraint.Kind(),
+		Properties:    constraint.GetProperties(),
+		DependencyIDs: constraint.ActivationSet,
+	})
+}
+
+func (constraint *ReverseDependencyConstraint) UnmarshalJSON(jsonBytes []byte) error {
 	data := &struct {
 		Kind          string                                 `json:"kind"`
 		Properties    map[string]interface{}                 `json:"properties"`
