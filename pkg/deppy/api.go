@@ -118,6 +118,7 @@ type MutableVariable interface {
 type LitMapping interface {
 	LitOf(subject Identifier) z.Lit
 	LogicCircuit() *logic.C
+	HasVariableForLit(m z.Lit) bool
 }
 
 // Constraint implementations limit the circumstances under which a

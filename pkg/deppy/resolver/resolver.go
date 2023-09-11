@@ -14,15 +14,15 @@ import (
 // be found.
 type Solution struct {
 	err       deppy.NotSatisfiable
-	selection map[deppy.Identifier]deppy.Variable
+	selection []deppy.Variable
 	problem   deppy.ResolutionProblem
 }
 
 func (s *Solution) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
-		Error     deppy.NotSatisfiable                `json:"error"`
-		Selection map[deppy.Identifier]deppy.Variable `json:"selection"`
-		Problem   deppy.ResolutionProblem             `json:"problem"`
+		Error     deppy.NotSatisfiable    `json:"error"`
+		Selection []deppy.Variable        `json:"selection"`
+		Problem   deppy.ResolutionProblem `json:"problem"`
 	}{
 		Error:     s.err,
 		Selection: s.selection,
@@ -50,15 +50,19 @@ func (s *Solution) NotSatisfiable() deppy.NotSatisfiable {
 
 // SelectedVariables returns the variables that were selected by the solver
 // as part of the solution
-func (s *Solution) SelectedVariables() map[deppy.Identifier]deppy.Variable {
+func (s *Solution) SelectedVariables() []deppy.Variable {
 	return s.selection
 }
 
 // IsSelected returns true if the variable identified by the identifier was selected
 // in the solution by the resolver. It will return false otherwise.
 func (s *Solution) IsSelected(identifier deppy.Identifier) bool {
-	_, ok := s.selection[identifier]
-	return ok
+	for _, variable := range s.selection {
+		if variable.Identifier() == identifier {
+			return true
+		}
+	}
+	return false
 }
 
 // Problem returns the stated problem of the solution.
@@ -134,12 +138,7 @@ func (d DeppyResolver) Solve(ctx context.Context, problem deppy.ResolutionProble
 		return nil, err
 	}
 
-	selectionMap := map[deppy.Identifier]deppy.Variable{}
-	for _, variable := range selection {
-		selectionMap[variable.Identifier()] = variable
-	}
-
-	solution := &Solution{selection: selectionMap, err: nil}
+	solution := &Solution{selection: selection, err: nil}
 	if err != nil {
 		unsatError := deppy.NotSatisfiable{}
 		errors.As(err, &unsatError)

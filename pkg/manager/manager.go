@@ -13,6 +13,7 @@ import (
 
 // Manager manages OLM software repositories
 type Manager interface {
+	GetPackageDatabase() store.PackageDatabase
 	AddRepository(ctx context.Context, repositoryImageUrl string) error
 	ListRepositories(ctx context.Context) ([]store.CachedRepository, error)
 	ListGVKs(ctx context.Context) (map[string][]store.CachedBundle, error)
@@ -25,6 +26,7 @@ type Manager interface {
 	Install(ctx context.Context, packageName string) error
 	Resolve(ctx context.Context, packageName ...string) ([]deppy.Variable, error)
 	GetBundlesForPackage(ctx context.Context, packageName string, options ...store.PackageSearchOption) ([]store.CachedBundle, error)
+	GetUniqueBundlesForPackage(ctx context.Context, packageName string) ([]store.CachedBundle, error)
 	Close() error
 }
 
@@ -35,6 +37,10 @@ type containerBasedManager struct {
 	logger     *logrus.Logger
 	configPath string
 	// installer  *PackageInstaller
+}
+
+func (m *containerBasedManager) GetPackageDatabase() store.PackageDatabase {
+	return m.PackageDatabase
 }
 
 func NewManager(configPath string, logger *logrus.Logger) (Manager, error) {

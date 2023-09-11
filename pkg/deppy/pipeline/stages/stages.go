@@ -20,6 +20,8 @@ const (
 	RequiredPackageNameProperty    = "olm.package.name"
 	RequiredPackageVersionProperty = "olm.package.version"
 
+	BundleDependencyConstraintVariableActivatingVariableIDProperty = "olm.variable.activating-variable"
+
 	BundleVariableKind           = "olm.variable.bundle"
 	PackageNameBundleProperty    = "olm.bundle.package-name"
 	PackageVersionBundleProperty = "olm.bundle.package-version"
@@ -28,7 +30,8 @@ const (
 
 	UniquenessConstraintVariableKind = "olm.variable.uniqueness-constraint"
 
-	DependencyConstraintVariableKind = "olm.variable.dependency-constraint"
+	BundleDependencyConstraintVariableKind = "olm.variable.bundle-dependency-constraint"
+	ChannelVariableKind                    = "olm.variable.channel"
 )
 
 // Task is a blocking function that takes a context, a stdin channel, a stdout channel, and a stderr channel.
@@ -86,14 +89,37 @@ func RequiredPackages(packageNames ...string) Stage {
 	}
 }
 
-// RequiredPackageBundles is a stage that produces bundle variables to satisfy required-package variables
+func InstalledBundles(installedBundles ...string) Stage {
+	return Stage{
+		task: func(ctx context.Context, stdin <-chan deppy.Variable, stdout chan<- deppy.Variable) error {
+			for i := 0; i < len(installedBundles); i += 2 {
+				packageName := installedBundles[i]
+				version := installedBundles[i+1]
+				varId := deppy.Identifier(fmt.Sprintf("installed-package/%s", packageName))
+				v := variables.NewMutableVariable(varId, RequiredPackageVariableKind, map[string]interface{}{
+					RequiredPackageNameProperty:    packageName,
+					RequiredPackageVersionProperty: version,
+				})
+				_ = v.AddMandatory("mandatory")
+				stdout <- v
+			}
+
+			// pass any variables you see to the next stage
+			Pipe(stdin, stdout)
+			return nil
+		},
+	}
+}
+
+// InitialRequiredBundleSet is a stage that produces bundle variables to satisfy required-package variables
 // It also creates another variable which activates if the required-package variable is activated, it also
 // has dependencies on any bundle variables that satisfy the required-package variable request.
 // If the required-package variable is mandatory, this will have the effect of ensuring that at least one bundle
 // that can satisfy it is selected (or fail trying)
-func RequiredPackageBundles(registryManager manager.Manager) Stage {
+func InitialRequiredBundleSet(registryManager manager.Manager) Stage {
 	return Stage{
 		task: func(ctx context.Context, stdin <-chan deppy.Variable, stdout chan<- deppy.Variable) error {
+			processed := map[deppy.Identifier]struct{}{}
 			for {
 				select {
 				case <-ctx.Done():
@@ -106,48 +132,157 @@ func RequiredPackageBundles(registryManager manager.Manager) Stage {
 					// if this is a required-package variable, add a bundle variable
 					if variable.Kind() == RequiredPackageVariableKind {
 						// extract package name and version range parameters
-						packageName, err := getPropertyAsString(variable, RequiredPackageNameProperty)
+						packageName, err := getProperty[string](variable, RequiredPackageNameProperty)
 						if err != nil {
 							return err
 						}
-						packageVersion, err := getPropertyAsString(variable, RequiredPackageVersionProperty)
-						if err != nil {
-							return err
-						}
-						semverRange, err := semver.ParseRange(packageVersion)
+						semverRange, err := getProperty[string](variable, RequiredPackageVersionProperty)
 						if err != nil {
 							return err
 						}
 
 						// query registry
-						bundles, err := registryManager.GetBundlesForPackage(ctx, packageName, store.InVersionRange(semverRange))
+						bundles, err := registryManager.GetBundlesForPackage(ctx, packageName, store.InVersionRange(semver.MustParseRange(semverRange)))
 						if err != nil {
 							return err
 						}
 
-						dependencyConstraintVariable := variables.NewMutableVariable(variable.Identifier()+"/bundle-dependency", DependencyConstraintVariableKind, map[string]interface{}{})
+						dependencyConstraintVariable := variables.NewMutableVariable(variable.Identifier()+"/bundle-dependency", BundleDependencyConstraintVariableKind, map[string]interface{}{
+							BundleDependencyConstraintVariableActivatingVariableIDProperty: variable,
+						})
 
 						_ = dependencyConstraintVariable.AddReverseDependency("activating-variable", variable.Identifier())
 						_ = dependencyConstraintVariable.AddDependency("bundle.dependencies")
 
 						// add a bundle variable for each bundle that matches the required package
 						sortBundlesByVersionDesc(bundles)
+						var depIds []deppy.Identifier
 						for _, bundle := range bundles {
-							bundle := bundle
-							v := variables.NewMutableVariable(deppy.Identifier(bundle.BundleID), BundleVariableKind, map[string]interface{}{
-								PackageNameBundleProperty:    bundle.GetPackageName(),
-								PackageVersionBundleProperty: bundle.GetVersion(),
-								RepositoryBundleProperty:     bundle.Repository,
-								BundleProperty:               bundle,
-							})
-							_ = dependencyConstraintVariable.AddDependency("bundle.dependencies", v.Identifier())
-							stdout <- v
+							v := newBundleVariable(bundle)
+							depIds = append(depIds, v.Identifier())
+							if _, ok := processed[v.Identifier()]; !ok {
+								stdout <- v
+								processed[v.Identifier()] = struct{}{}
+							}
 						}
+						_ = dependencyConstraintVariable.AddDependency("bundle.dependencies", depIds...)
 						stdout <- dependencyConstraintVariable
 					}
 
 					// pass any variables you see to the next stage
 					stdout <- variable
+				}
+			}
+		},
+	}
+}
+
+// ChannelsAndUpgradeEdges is a stage that slurps required-package variables with ids starting with "installed-package"
+// i.e. the variables that represent installed cluster content
+// and replaces them with a copy of the variable (but not its constraints) and models instead channel and upgrade constraints
+// this stage enables upgrades
+func ChannelsAndUpgradeEdges(packageDB store.PackageDatabase) Stage {
+	return Stage{
+		task: func(ctx context.Context, stdin <-chan deppy.Variable, stdout chan<- deppy.Variable) error {
+			processed := map[string]struct{}{}
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case variable, hasNext := <-stdin:
+					if !hasNext {
+						return nil
+					}
+
+					// if this is a required-package variable, add a bundle variable
+					if variable.Kind() == BundleDependencyConstraintVariableKind && strings.HasPrefix(variable.Identifier().String(), "installed-package/") {
+						reqPackageVar, err := getProperty[deppy.Variable](variable, BundleDependencyConstraintVariableActivatingVariableIDProperty)
+						if err != nil {
+							return err
+						}
+						if reqPackageVar.Kind() != RequiredPackageVariableKind {
+							return fmt.Errorf("expected required-package variable, got %s", reqPackageVar.Kind())
+						}
+						// extract package name and version range parameters
+						packageName, err := getProperty[string](reqPackageVar, RequiredPackageNameProperty)
+						if err != nil {
+							return err
+						}
+
+						if _, ok := processed[packageName]; ok {
+							stdout <- variable
+							continue
+						}
+						processed[packageName] = struct{}{}
+
+						var pkgs []store.CachedPackage
+						err = packageDB.IteratePackages(ctx, func(pkg *store.CachedPackage) error {
+							if pkg.GetName() == packageName {
+								pkgs = append(pkgs, *pkg)
+							}
+							return nil
+						})
+						if err != nil {
+							return err
+						}
+
+						// todo: we assume only one package - we'll need to expand later to package name collisions across repositories
+						if len(pkgs) == 0 {
+							return fmt.Errorf("package not found '%s'", packageName)
+						}
+						if len(pkgs) > 1 {
+							return fmt.Errorf("too many packages found '%s'", pkgs)
+						}
+
+						version, err := getProperty[string](reqPackageVar, RequiredPackageVersionProperty)
+						if err != nil {
+							return err
+						}
+
+						sourceBundles, err := packageDB.GetBundlesForPackage(ctx, packageName, store.InVersionRange(semver.MustParseRange("=="+version)))
+						if err != nil {
+							return err
+						}
+
+						if len(sourceBundles) == 0 {
+							return errors.New("no bundles found for package")
+						}
+						if len(sourceBundles) > 1 {
+							return errors.New("multiple bundles found for package")
+						}
+
+						pkg := pkgs[0]
+						bundleDependencyVariable := variables.NewMutableVariable(variable.Identifier(), variable.Kind(), variable.GetProperties())
+						_ = bundleDependencyVariable.AddReverseDependency("activating-variable", reqPackageVar.Identifier())
+						var depIDs []deppy.Identifier
+						for _, channel := range pkg.Channels {
+							chVar := variables.NewMutableVariable(ChannelVariableID(pkg.Name, channel.Name), ChannelVariableKind, map[string]interface{}{})
+							depIDs = append(depIDs, chVar.Identifier())
+							if channel.Name == pkg.DefaultChannelName {
+								depIDs[0], depIDs[len(depIDs)-1] = depIDs[len(depIDs)-1], depIDs[0]
+							}
+							bundles, err := packageDB.GetBundlesForPackage(ctx, pkg.Name, store.InChannel(channel.Name), store.InVersionRange(semver.MustParseRange(">"+version)), store.Replaces(sourceBundles[0].CsvName))
+							if err != nil {
+								return err
+							}
+
+							sortBundlesByVersionDesc(bundles)
+							// "upgrading" to yourself is also an option (i.e. keep things as they are)
+							// make it the default one by putting it at the head of the dependency list
+							bundles = append(sourceBundles, bundles...)
+							for _, bundle := range bundles {
+								v := newBundleVariable(bundle)
+								_ = chVar.AddDependency("bundles", v.Identifier())
+								stdout <- v
+							}
+							stdout <- chVar
+						}
+						_ = bundleDependencyVariable.AddDependency("channels", depIDs...)
+						stdout <- bundleDependencyVariable
+					} else {
+						// pass any variables you see to the next stage
+						stdout <- variable
+					}
 				}
 			}
 		},
@@ -200,7 +335,7 @@ func BundleDependencies(registryManager manager.Manager) Stage {
 							// mark head as processed
 							processed[deppy.Identifier(head.BundleID)] = struct{}{}
 
-							v := variables.NewMutableVariable(deppy.Identifier(head.BundleID)+"/package-dependencies", DependencyConstraintVariableKind, map[string]interface{}{})
+							v := variables.NewMutableVariable(deppy.Identifier(head.BundleID)+"/package-dependencies", BundleDependencyConstraintVariableKind, map[string]interface{}{})
 							_ = v.AddReverseDependency("activating-variable", deppy.Identifier(head.BundleID))
 
 							for _, packageDependency := range head.PackageDependencies {
@@ -226,7 +361,7 @@ func BundleDependencies(registryManager manager.Manager) Stage {
 								stdout <- v
 							}
 
-							v = variables.NewMutableVariable(deppy.Identifier(head.BundleID)+"/gvk-dependencies", DependencyConstraintVariableKind, map[string]interface{}{})
+							v = variables.NewMutableVariable(deppy.Identifier(head.BundleID)+"/gvk-dependencies", BundleDependencyConstraintVariableKind, map[string]interface{}{})
 							_ = v.AddReverseDependency("activating-variable", deppy.Identifier(head.BundleID))
 
 							for _, gvkDependency := range head.RequiredApis {
@@ -249,12 +384,7 @@ func BundleDependencies(registryManager manager.Manager) Stage {
 							if head.BundleID == variableBundle.BundleID {
 								stdout <- variable
 							} else {
-								stdout <- variables.NewMutableVariable(deppy.Identifier(head.BundleID), BundleVariableKind, map[string]interface{}{
-									PackageNameBundleProperty:    head.GetPackageName(),
-									PackageVersionBundleProperty: head.GetVersion(),
-									RepositoryBundleProperty:     head.Repository,
-									BundleProperty:               head,
-								})
+								stdout <- newBundleVariable(head)
 							}
 						}
 					} else if !ok {
@@ -266,6 +396,10 @@ func BundleDependencies(registryManager manager.Manager) Stage {
 	}
 }
 
+func ChannelVariableID(packageName, channelName string) deppy.Identifier {
+	return deppy.Identifier(fmt.Sprintf("channel/%s/%s", packageName, channelName))
+}
+
 // UniquenessConstraints is a stage that produces a uniqueness-constraints variables with constraints against
 // individual packages and gvks that ensure that at most 1 bundle for each package and gvk is selected in the solution.
 // This is mainly to prevent CRDs stepping on each other's toes - this may need to be loosened up to perhaps just gvk?
@@ -275,12 +409,32 @@ func UniquenessConstraints() Stage {
 			v := variables.NewMutableVariable("uniqueness-constraints", UniquenessConstraintVariableKind, map[string]interface{}{})
 			_ = v.AddMandatory("mandatory")
 
+			pkgMap := map[string][]store.CachedBundle{}
+			gvkMap := map[string][]store.CachedBundle{}
+
 			for {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
 				case variable, hasNext := <-stdin:
 					if !hasNext {
+						for packageName, deps := range pkgMap {
+							sortBundlesByVersionDesc(deps)
+							depIDs := make([]deppy.Identifier, len(deps))
+							for i, dep := range deps {
+								depIDs[i] = deppy.Identifier(dep.BundleID)
+							}
+							_ = v.AddAtMost(deppy.Identifier("package-uniqueness/"+packageName), 1, depIDs...)
+						}
+
+						for gvk, deps := range gvkMap {
+							sortBundlesByVersionDesc(deps)
+							depIDs := make([]deppy.Identifier, len(deps))
+							for i, dep := range deps {
+								depIDs[i] = deppy.Identifier(dep.BundleID)
+							}
+							_ = v.AddAtMost(deppy.Identifier("gvk-uniqueness/"+gvk), 1, depIDs...)
+						}
 						stdout <- v
 						return nil
 					}
@@ -295,14 +449,39 @@ func UniquenessConstraints() Stage {
 						}
 
 						// add bundle identifier to its package uniqueness constraint
-						_ = v.AddAtMost(deppy.Identifier("package-uniqueness/"+bundle.GetPackageName()), 1, variable.Identifier())
+						pkgMap[bundle.PackageName] = append(pkgMap[bundle.PackageName], bundle)
 
 						for _, gvk := range bundle.ProvidedApis {
-							// add bundle identifier to its gvk uniqueness constraint
-							_ = v.AddAtMost(deppy.Identifier("gvk-uniqueness/"+gvk.Group+"/"+gvk.Version+"/"+gvk.Kind), 1, variable.Identifier())
+							gvkMap[gvk.Group+"/"+gvk.Version+"/"+gvk.Kind] = append(gvkMap[gvk.Group+"/"+gvk.Version+"/"+gvk.Kind], bundle)
 						}
 					}
 					stdout <- variable
+				}
+			}
+		},
+	}
+}
+
+func SSTE(enabled bool) Stage {
+	return Stage{
+		task: func(ctx context.Context, stdin <-chan deppy.Variable, stdout chan<- deppy.Variable) error {
+			var vars []deppy.Variable
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case variable, hasNext := <-stdin:
+					if !hasNext {
+						for _, v := range vars {
+							stdout <- v
+						}
+						return nil
+					}
+					if !enabled {
+						stdout <- variable
+					} else {
+						vars = append(vars, variable)
+					}
 				}
 			}
 		},
@@ -365,6 +544,18 @@ func Filter(fn FilterFn) Stage {
 	}
 }
 
+func getProperty[T any](v deppy.Variable, key string) (T, error) {
+	value, ok := v.GetProperty(key)
+	if !ok {
+		return *new(T), fmt.Errorf("property %s not found", key)
+	}
+	valueAsT, ok := value.(T)
+	if !ok {
+		return *new(T), fmt.Errorf("property %s is not a %T", key, valueAsT)
+	}
+	return valueAsT, nil
+}
+
 // getPropertyAsString is a helper function that extracts a string property from a variable
 func getPropertyAsString(v deppy.Variable, key string) (string, error) {
 	value, ok := v.GetProperty(key)
@@ -383,10 +574,24 @@ func sortBundlesByVersionDesc(bundles []store.CachedBundle) {
 	slices.SortStableFunc(bundles, func(i, j store.CachedBundle) int {
 		v1 := semver.MustParse(i.GetVersion())
 		v2 := semver.MustParse(j.GetVersion())
-
-		if v1.EQ(v2) {
-			return strings.Compare(i.GetPackageName(), j.GetPackageName())
-		}
 		return -1 * v1.Compare(v2)
+	})
+}
+
+// sortBundlesByVersionAsc is a helper function that sorts bundles by version in ascending order
+func sortBundlesByVersionAsc(bundles []store.CachedBundle) {
+	slices.SortStableFunc(bundles, func(i, j store.CachedBundle) int {
+		v1 := semver.MustParse(i.GetVersion())
+		v2 := semver.MustParse(j.GetVersion())
+		return v1.Compare(v2)
+	})
+}
+
+func newBundleVariable(bundle store.CachedBundle) deppy.Variable {
+	return variables.NewMutableVariable(deppy.Identifier(bundle.BundleID), BundleVariableKind, map[string]interface{}{
+		PackageNameBundleProperty:    bundle.GetPackageName(),
+		PackageVersionBundleProperty: bundle.GetVersion(),
+		RepositoryBundleProperty:     bundle.Repository,
+		BundleProperty:               bundle,
 	})
 }

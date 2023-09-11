@@ -200,9 +200,9 @@ func (a *ActivationSet[T]) Has(key T) bool {
 }
 
 func (a *ActivationSet[T]) MarshalJSON() ([]byte, error) {
-	out := make(map[T]bool, a.values.Len())
+	out := make([]T, 0)
 	for pair := a.values.Oldest(); pair != nil; pair = pair.Next() {
-		out[pair.Value.Value()] = pair.Value.IsActivated()
+		out = append(out, pair.Value.Value())
 	}
 	return json.Marshal(out)
 }
@@ -224,14 +224,14 @@ func (a *ActivationSet[T]) UnmarshalJSON(jsonBytes []byte) error {
 }
 
 type ActivationMap[K comparable, V any] struct {
-	values map[K]*ActivationValue[V]
+	values *orderedmap.OrderedMap[K, *ActivationValue[V]]
 	lock   sync.RWMutex
 	sortFn SortFn
 }
 
 func NewActivationMap[K comparable, V any]() *ActivationMap[K, V] {
 	return &ActivationMap[K, V]{
-		values: map[K]*ActivationValue[V]{},
+		values: orderedmap.New[K, *ActivationValue[V]](),
 		lock:   sync.RWMutex{},
 	}
 }
@@ -239,20 +239,20 @@ func NewActivationMap[K comparable, V any]() *ActivationMap[K, V] {
 func (a *ActivationMap[K, V]) Len() int {
 	a.lock.RLock()
 	defer a.lock.RUnlock()
-	return len(a.values)
+	return a.Len()
 }
 
 func (a *ActivationMap[K, V]) Put(key K, value V) {
 	a.lock.Lock()
 	defer a.lock.Unlock()
-	a.values[key] = NewActivationVariable[V](value)
+	a.values.Set(key, NewActivationVariable[V](value))
 }
 
 func (a *ActivationMap[K, V]) GetValue(key K) (V, bool) {
 	a.lock.RLock()
 	defer a.lock.RUnlock()
-	if value, ok := a.values[key]; ok {
-		return value.Value(), true
+	if v, ok := a.values.Get(key); ok {
+		return v.Value(), true
 	}
 	return *new(V), false
 }
@@ -261,9 +261,10 @@ func (a *ActivationMap[K, V]) Elements() []V {
 	a.lock.RLock()
 	defer a.lock.RUnlock()
 	var elements []V
-	for _, value := range a.values {
-		if value.IsActivated() {
-			elements = append(elements, value.Value())
+
+	for pair := a.values.Oldest(); pair != nil; pair = pair.Next() {
+		if pair.Value.IsActivated() {
+			elements = append(elements, pair.Value.Value())
 		}
 	}
 
@@ -277,8 +278,10 @@ func (a *ActivationMap[K, V]) Merge(other *ActivationMap[K, V]) (bool, error) {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 	changed := false
-	for key, otherValue := range other.values {
-		if value, ok := a.values[key]; ok {
+	for pair := a.values.Oldest(); pair != nil; pair = pair.Next() {
+		key := pair.Key
+		otherValue := pair.Value
+		if value, ok := a.values.Get(key); ok {
 			if ok, err := value.Merge(otherValue); err != nil {
 				return false, err
 			} else if ok {
@@ -287,7 +290,8 @@ func (a *ActivationMap[K, V]) Merge(other *ActivationMap[K, V]) (bool, error) {
 		} else {
 			a.Put(key, otherValue.Value())
 			if !otherValue.IsActivated() {
-				a.values[key].Deactivate()
+				v, _ := a.values.Get(key)
+				v.Deactivate()
 			}
 			changed = true
 		}
@@ -299,8 +303,8 @@ func (a *ActivationMap[K, V]) Keys() []K {
 	a.lock.RLock()
 	defer a.lock.RUnlock()
 	var keys []K
-	for key := range a.values {
-		keys = append(keys, key)
+	for pair := a.values.Oldest(); pair != nil; pair = pair.Next() {
+		keys = append(keys, pair.Key)
 	}
 	return keys
 }
@@ -308,16 +312,16 @@ func (a *ActivationMap[K, V]) Keys() []K {
 func (a *ActivationMap[K, V]) Activate(key K) {
 	a.lock.Lock()
 	defer a.lock.Unlock()
-	if _, ok := a.values[key]; ok {
-		a.values[key].Activate()
+	if v, ok := a.values.Get(key); ok {
+		v.Activate()
 	}
 }
 
 func (a *ActivationMap[K, V]) Deactivate(key K) {
 	a.lock.Lock()
 	defer a.lock.Unlock()
-	if _, ok := a.values[key]; ok {
-		a.values[key].Deactivate()
+	if v, ok := a.values.Get(key); ok {
+		v.Deactivate()
 	}
 }
 
@@ -336,7 +340,7 @@ func (a *ActivationMap[K, V]) Has(key K) bool {
 func (a *ActivationMap[K, V]) IsActivated(key K) (bool, error) {
 	a.lock.RLock()
 	defer a.lock.RUnlock()
-	v, ok := a.values[key]
+	v, ok := a.values.Get(key)
 	if !ok {
 		return false, deppy.NotFoundErrorf("key not found")
 	}
@@ -344,22 +348,28 @@ func (a *ActivationMap[K, V]) IsActivated(key K) (bool, error) {
 }
 
 func (a *ActivationMap[K, V]) MarshalJSON() ([]byte, error) {
-	bytes, err := json.Marshal(a.values)
+	m := map[K]V{}
+	for pair := a.values.Oldest(); pair != nil; pair = pair.Next() {
+		key := pair.Key
+		value := pair.Value.Value()
+		m[key] = value
+	}
+	bytes, err := json.Marshal(m)
 	return bytes, err
 }
 
 func (a *ActivationMap[K, V]) UnmarshalJSON(jsonBytes []byte) error {
-	data := make(map[K]ActivationValue[V], 0)
+	data := make(map[K]ActivationValue[V])
 	if err := json.Unmarshal(jsonBytes, &data); err != nil {
 		return err
 	}
 
 	if a.values == nil {
-		a.values = map[K]*ActivationValue[V]{}
+		a.values = orderedmap.New[K, *ActivationValue[V]]()
 	}
 	for key, _ := range data {
 		val := data[key]
-		a.values[key] = &val
+		a.values.Set(key, &val)
 	}
 
 	return nil

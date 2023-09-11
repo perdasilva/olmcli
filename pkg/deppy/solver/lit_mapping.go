@@ -111,6 +111,11 @@ func (d *litMapping) VariableOf(m z.Lit) deppy.Variable {
 	return zeroVariable{}
 }
 
+func (d *litMapping) HasVariableForLit(m z.Lit) bool {
+	_, ok := d.variables[m]
+	return ok
+}
+
 // ConstraintOf returns the constraint application corresponding to
 // the provided literal, or a zeroConstraint if no such constraint
 // exists.

@@ -298,7 +298,7 @@ func ReverseDependency(constraintID deppy.Identifier, dependencies ...deppy.Iden
 	c := &ReverseDependencyConstraint{
 		MutableConstraintBase: MutableConstraintBase{
 			constraintID: constraintID,
-			kind:         ConstraintKindDependency,
+			kind:         ConstraintKindReverseDependency,
 			properties:   map[string]interface{}{},
 			lock:         sync.RWMutex{},
 		},

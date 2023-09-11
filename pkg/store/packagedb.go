@@ -26,10 +26,17 @@ const (
 	keySeparator       = "/"
 )
 
+type UpgradeEdge struct {
+	Replaces  string   `json:"replaces"`
+	Skips     []string `json:"skips"`
+	SkipRange string   `json:"skipRange"`
+}
+
 type packageSearchConfig struct {
 	repositories []string
 	channel      string
 	versionRange semver.Range
+	replaces     string
 }
 
 func (p *packageSearchConfig) applyOptions(options ...PackageSearchOption) {
@@ -42,30 +49,55 @@ func (p *packageSearchConfig) keep(bundle *CachedBundle) bool {
 	if bundle == nil {
 		return false
 	}
-	if len(p.repositories) > 0 {
-		in := false
-		for _, repo := range p.repositories {
-			if repo == bundle.Repository {
-				in = true
+
+	predicates := []func(bundle *CachedBundle) bool{
+		func(bundle *CachedBundle) bool {
+			if p.repositories == nil {
+				return true
 			}
-		}
-		if !in {
+			for _, repo := range p.repositories {
+				if repo == bundle.Repository {
+					return true
+				}
+			}
 			return false
-		}
-	}
-	if p.versionRange != nil {
-		ver, err := semver.Parse(bundle.Version)
-		if err != nil || !p.versionRange(ver) {
-			return false
-		}
-	}
-	if p.channel != "" {
-		if p.channel != bundle.ChannelName {
-			return false
-		}
+		},
+		func(bundle *CachedBundle) bool {
+			if p.versionRange != nil {
+				ver, err := semver.Parse(bundle.Version)
+				if err != nil || !p.versionRange(ver) {
+					return false
+				}
+			}
+			return true
+		},
+		func(bundle *CachedBundle) bool {
+			if p.channel != "" {
+				if p.channel != bundle.ChannelName {
+					return false
+				}
+			}
+			return true
+		},
+		func(bundle *CachedBundle) bool {
+			if p.replaces != "" {
+				for _, upgradeEdge := range bundle.UpgradeEdges {
+					if upgradeEdge.Replaces == p.replaces {
+						return true
+					}
+				}
+				return false
+			}
+			return true
+		},
 	}
 
-	return true
+	keep := true
+	for _, predicate := range predicates {
+		keep = keep && predicate(bundle)
+	}
+
+	return keep
 }
 
 type PackageSearchOption func(config *packageSearchConfig)
@@ -88,6 +120,12 @@ func InChannel(channel string) PackageSearchOption {
 	}
 }
 
+func Replaces(csvName string) PackageSearchOption {
+	return func(config *packageSearchConfig) {
+		config.replaces = csvName
+	}
+}
+
 type CachedRepository struct {
 	RepositoryName   string `json:"name"`
 	RepositorySource string `json:"source"`
@@ -99,10 +137,11 @@ func (c CachedRepository) EntryID() string {
 
 type CachedBundle struct {
 	*api.Bundle
-	BundleID            string             `json:"id"`
-	Repository          string             `json:"repository"`
-	DefaultChannelName  string             `json:"defaultChannelName"`
-	PackageDependencies []property.Package `json:"packageDependencies"`
+	BundleID            string                 `json:"id"`
+	Repository          string                 `json:"repository"`
+	DefaultChannelName  string                 `json:"defaultChannelName"`
+	PackageDependencies []property.Package     `json:"packageDependencies"`
+	UpgradeEdges        map[string]UpgradeEdge `json:"upgradeEdges"`
 }
 
 func (c CachedBundle) PackageDependenciesJSON() (string, error) {
@@ -171,7 +210,9 @@ type PackageDatabase interface {
 	GetPackage(ctx context.Context, packageID string) (*CachedPackage, error)
 	GetBundle(ctx context.Context, bundleID string) (*CachedBundle, error)
 	IterateBundles(ctx context.Context, fn func(bundle *CachedBundle) error) error
+	IteratePackages(ctx context.Context, fn func(bundle *CachedPackage) error) error
 	GetBundlesForPackage(ctx context.Context, packageName string, options ...PackageSearchOption) ([]CachedBundle, error)
+	GetUniqueBundlesForPackage(ctx context.Context, packageName string) ([]CachedBundle, error)
 	Close() error
 }
 
@@ -185,6 +226,46 @@ type boltPackageDatabase struct {
 	bundleTable     *BoltDBTable[CachedBundle]
 	gvkTable        *BoltDBTable[CachedGVKBundle]
 	logger          *logrus.Logger
+}
+
+func (b *boltPackageDatabase) GetUniqueBundlesForPackage(ctx context.Context, packageName string) ([]CachedBundle, error) {
+	searchOptions, err := b.defaultPackageSearchConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	type result struct {
+		bundles []CachedBundle
+		err     error
+	}
+	resultsChannel := make(chan result, len(searchOptions.repositories))
+	for _, repositoryName := range searchOptions.repositories {
+		go func(prefix string) {
+			entries, err := b.bundleTable.Seek(prefix)
+			resultsChannel <- result{entries, err}
+		}(fmt.Sprintf("%s%s%s%s", repositoryName, keySeparator, packageName, keySeparator))
+	}
+
+	csvNameMap := map[string]CachedBundle{}
+	var errs []error
+	for i := 0; i < cap(resultsChannel); i++ {
+		result := <-resultsChannel
+		if result.err == nil {
+			for _, b := range result.bundles {
+				if searchOptions.keep(&b) {
+					csvNameMap[b.CsvName] = b
+				}
+			}
+		} else {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return nil, errs[0]
+	}
+
+	return nil, nil
 }
 
 func NewPackageDatabase(databasePath string, logger *logrus.Logger) (PackageDatabase, error) {
@@ -284,8 +365,24 @@ func (b *boltPackageDatabase) CacheRepository(ctx context.Context, repository re
 		}
 
 		b.logger.Debugln("Inserting bundles...")
+		var bundleSet = map[string]*CachedBundle{}
+		var upgradeEdges = map[string]map[string]UpgradeEdge{}
 		for bundle := bundleIterator.Next(); bundle != nil; bundle = bundleIterator.Next() {
 			pkgName := bundle.PackageName
+			bundleID := GetBundleKey(repoName, bundle)
+			if _, ok := upgradeEdges[bundleID]; !ok {
+				upgradeEdges[bundleID] = map[string]UpgradeEdge{}
+			}
+			upgradeEdges[bundleID][bundle.ChannelName] = UpgradeEdge{
+				Replaces:  bundle.Replaces,
+				Skips:     bundle.Skips,
+				SkipRange: bundle.SkipRange,
+			}
+
+			if _, ok := bundleSet[bundleID]; ok {
+				continue
+			}
+
 			if _, ok := defaultChannelNameMap[pkgName]; !ok {
 				pkg, err := repository.GetPackage(ctx, pkgName)
 				if err != nil {
@@ -315,14 +412,11 @@ func (b *boltPackageDatabase) CacheRepository(ctx context.Context, repository re
 			}
 
 			cachedBundle := &CachedBundle{
-				BundleID:            GetBundleKey(repoName, bundle),
+				BundleID:            bundleID,
 				Bundle:              bundle,
 				Repository:          repoName,
 				DefaultChannelName:  defaultChannelNameMap[bundle.PackageName],
 				PackageDependencies: packageDependencies,
-			}
-			if err := b.bundleTable.InsertInTransaction(tx, cachedBundle); err != nil {
-				return nil
 			}
 
 			for _, gvk := range cachedBundle.ProvidedApis {
@@ -334,6 +428,16 @@ func (b *boltPackageDatabase) CacheRepository(ctx context.Context, repository re
 				}); err != nil {
 					return err
 				}
+			}
+
+			bundleSet[bundleID] = cachedBundle
+		}
+
+		// add upgrade edges and insert bundles
+		for _, bundle := range bundleSet {
+			bundle.UpgradeEdges = upgradeEdges[bundle.BundleID]
+			if err := b.bundleTable.InsertInTransaction(tx, bundle); err != nil {
+				return err
 			}
 		}
 
@@ -386,6 +490,10 @@ func (b *boltPackageDatabase) ListBundles(_ context.Context) ([]CachedBundle, er
 
 func (b *boltPackageDatabase) IterateBundles(_ context.Context, fn func(bundle *CachedBundle) error) error {
 	return b.bundleTable.Iterate(fn)
+}
+
+func (b *boltPackageDatabase) IteratePackages(_ context.Context, fn func(bundle *CachedPackage) error) error {
+	return b.packageTable.Iterate(fn)
 }
 
 func (b *boltPackageDatabase) SearchPackages(_ context.Context, searchTerm string) ([]CachedPackage, error) {
@@ -471,7 +579,7 @@ func (b *boltPackageDatabase) defaultPackageSearchConfig(ctx context.Context) (*
 }
 
 func GetBundleKey(repoName string, bundle *api.Bundle) string {
-	return strings.Join([]string{repoName, bundle.PackageName, bundle.ChannelName, bundle.CsvName}, keySeparator)
+	return strings.Join([]string{repoName, bundle.PackageName, bundle.CsvName}, keySeparator)
 }
 
 func GetPackageKey(repoName, pkg string) string {

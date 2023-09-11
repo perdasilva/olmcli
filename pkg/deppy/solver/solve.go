@@ -8,15 +8,16 @@ import (
 	"github.com/go-air/gini/inter"
 	"github.com/go-air/gini/z"
 	"github.com/perdasilva/olmcli/pkg/deppy"
+	"log/slog"
 )
 
 var ErrIncomplete = errors.New("cancelled before a solution could be found")
 
 type solver struct {
-	g                      inter.S
-	litMap                 *litMapping
-	tracer                 deppy.Tracer
-	buffer                 []z.Lit
+	g      inter.S
+	litMap *litMapping
+	tracer deppy.Tracer
+	// buffer                 []z.Lit
 	disableOrderPreference bool
 }
 
@@ -46,7 +47,7 @@ func (s *solver) Solve(ctx context.Context) (result []deppy.Variable, err error)
 	// collect literals of all mandatory variables to assume as a baseline
 	anchors := s.litMap.AnchorIdentifiers()
 	assumptions := make([]z.Lit, len(anchors))
-	for i := range s.litMap.AnchorIdentifiers() {
+	for i := range anchors {
 		assumptions[i] = s.litMap.LitOf(anchors[i])
 	}
 
@@ -68,14 +69,15 @@ func (s *solver) Solve(ctx context.Context) (result []deppy.Variable, err error)
 
 	if outcome != satisfiable && outcome != unsatisfiable {
 		// searcher for solutions in input Order, so that preferences
-		// can be taken into acount (i.e. prefer one catalog to another)
+		// can be taken into account (i.e. prefer one catalog to another)
 		outcome, assumptions, aset = (&search{s: s.g, lits: s.litMap, tracer: s.tracer}).Do(context.Background(), assumptions)
 	}
 	switch outcome {
 	case satisfiable:
-		s.buffer = s.litMap.Lits(s.buffer)
+		var buffer []z.Lit
+		buffer = s.litMap.Lits(buffer)
 		var extras, excluded []z.Lit
-		for _, m := range s.buffer {
+		for _, m := range buffer {
 			if _, ok := aset[m]; ok {
 				continue
 			}
@@ -85,15 +87,49 @@ func (s *solver) Solve(ctx context.Context) (result []deppy.Variable, err error)
 			}
 			extras = append(extras, m)
 		}
+
+		var asetNames []string
+		var extrasNames []string
+		var excludedNames []string
+		var excludedVars []deppy.Variable
+
+		for _, m := range assumptions {
+			if m > 0 {
+				asetNames = append(asetNames, s.litMap.VariableOf(m).Identifier().String())
+			}
+		}
+		for _, m := range extras {
+			if m > 0 {
+				extrasNames = append(extrasNames, s.litMap.VariableOf(m).Identifier().String())
+			}
+		}
+		for _, m := range excluded {
+			if m > 0 {
+				var v deppy.Variable = zeroVariable{}
+				if s.litMap.HasVariableForLit(m.Not()) {
+					v = s.litMap.VariableOf(m.Not())
+				}
+				excludedNames = append(excludedNames, v.Identifier().String())
+				excludedVars = append(excludedVars, v)
+			}
+		}
+
 		s.g.Untest()
+		slog.Info("optimizing for cardinality", "assumptions", asetNames, "extras", extrasNames, "excluded", excludedNames)
 		cs := s.litMap.CardinalityConstrainer(s.g, extras)
 		s.g.Assume(assumptions...)
 		s.g.Assume(excluded...)
+		// _, buffer = s.g.Test(buffer)
 		s.litMap.AssumeConstraints(s.g)
-		_, s.buffer = s.g.Test(s.buffer)
+		_, buffer = s.g.Test(buffer)
 		for w := 0; w <= cs.N(); w++ {
 			s.g.Assume(cs.Leq(w))
 			if s.g.Solve() == satisfiable {
+				for _, m := range assumptions {
+					if !s.g.Value(m) {
+						slog.Info("assumption failed", "assumption", s.litMap.VariableOf(m).Identifier().String())
+					}
+				}
 				return s.litMap.Variables(s.g), nil
 			}
 		}

@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/perdasilva/olmcli/pkg/deppy"
 	"github.com/perdasilva/olmcli/pkg/deppy/pipeline"
 	"github.com/perdasilva/olmcli/pkg/deppy/pipeline/stages"
 	"github.com/perdasilva/olmcli/pkg/deppy/resolver"
 	"github.com/perdasilva/olmcli/pkg/manager"
 	"github.com/sirupsen/logrus"
-	"log"
 	"log/slog"
 	"os"
 	"time"
@@ -27,9 +27,11 @@ func main() {
 
 	// get a list of package names from the command line
 	packageNames := os.Args[1:]
-	if len(packageNames) == 0 {
-		log.Fatal("no package names provided")
-	}
+	//if len(packageNames) == 0 {
+	//	log.Fatal("no package names provided")
+	//}
+
+	const ssteEnabled = false
 
 	// create problem pipeline
 	// variables flow from one stage to the next
@@ -39,42 +41,57 @@ func main() {
 	// with a reverse dependency on the original variable and any additional constraints.
 	// The reverse dependency variable will be activated by the solver iff the original variable is activated
 	ppl := pipeline.NewPipeline(
-		// produce required-package variables
+		// define the initial state/constraints
 		stages.RequiredPackages(packageNames...),
-
+		stages.SSTE(ssteEnabled),
+		stages.InstalledBundles("prometheus", "0.37.0"),
+		stages.SSTE(ssteEnabled),
 		// emit bundle-variables for each bundle that provides a required-package
 		// and a constraint variable that ensures that at least bundle is selected
 		// when the required-package is activated (selected by the solver)
-		stages.RequiredPackageBundles(registryManager),
+		stages.InitialRequiredBundleSet(registryManager),
+		stages.SSTE(ssteEnabled),
+		// enable upgrade edges
+		stages.ChannelsAndUpgradeEdges(registryManager.GetPackageDatabase()),
+		stages.SSTE(ssteEnabled),
 
 		// emit bundle-variables for each bundle that provides a package or gvk dependency
 		// emit bundle-dependency-variable that activates when the parent bundle-variable is activated
-		// the bundle-dependency-variable also has dependency constraints against the bundles that fullfil the
+		// the bundle-dependency-variable also has dependency constraints against the bundles that fulfil the
 		// dependencies
 		stages.BundleDependencies(registryManager),
+		stages.SSTE(ssteEnabled),
 
-		// look at every bundle-variable and emit an uniqueness-constraint-variable
+		// look at every bundle-variable and emit a uniqueness-constraint-variable
 		// that has constraints that ensures that at most 1 bundle-variable is selected / package and / gvk
 		stages.UniquenessConstraints(),
+		stages.SSTE(ssteEnabled),
 	)
 
 	// execute the pipeline to collect the problem
+	start := time.Now()
 	resolutionProblem, err := ppl.Run(ctx)
 	if err != nil {
-		slog.Error("error executing pipeline", "error", err)
+		slog.Error("error executing pipeline", "runtime", time.Since(start), "error", err)
+		return
 	}
 	variables, _ := resolutionProblem.GetVariables()
-	slog.Info("problem", "problem_id", resolutionProblem.ResolutionProblemID(), "variables", extractVariableIDs(variables))
+	for _, v := range variables {
+		slog.Info(fmt.Sprintf("%s", v))
+	}
+	slog.Info("problem", "problem_id", resolutionProblem.ResolutionProblemID(), "runtime", time.Since(start), "variables", extractVariableIDs(variables))
 
 	// solve the problem
-	start := time.Now()
+	start = time.Now()
 	r := resolver.NewDeppyResolver()
 	solution, err := r.Solve(ctx, resolutionProblem)
 	if err != nil {
 		slog.Error("error executing problem", "problem_id", resolutionProblem.ResolutionProblemID(), "runtime", time.Since(start), "error", err)
+		return
 	}
 	if len(solution.NotSatisfiable()) > 0 {
 		slog.Error("problem not satisfiable", "problem_id", resolutionProblem.ResolutionProblemID(), "runtime", time.Since(start), "error", solution.NotSatisfiable())
+		return
 	}
 	slog.Info("solution", "problem_id", resolutionProblem.ResolutionProblemID(), "runtime", time.Since(start), "solution", extractVariableIDs(solution.SelectedVariables()))
 }

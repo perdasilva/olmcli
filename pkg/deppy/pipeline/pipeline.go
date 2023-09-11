@@ -7,6 +7,8 @@ import (
 	"github.com/perdasilva/olmcli/pkg/deppy/pipeline/stages"
 	"golang.org/x/sync/errgroup"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -71,6 +73,21 @@ func (r Pipeline) Run(ctx context.Context) (deppy.ResolutionProblem, error) {
 		slog.Error("error building problem", "runtime", time.Since(start), "err", err)
 		return nil, err
 	}
+
+	weights := map[string]int{
+		stages.RequiredPackageVariableKind:            0,
+		stages.ChannelVariableKind:                    1,
+		stages.UniquenessConstraintVariableKind:       2,
+		stages.BundleDependencyConstraintVariableKind: 3,
+		stages.BundleVariableKind:                     4,
+	}
+
+	slices.SortStableFunc[[]deppy.Variable](result, func(a, b deppy.Variable) int {
+		if a.Kind() == b.Kind() {
+			return strings.Compare(a.Identifier().String(), b.Identifier().String())
+		}
+		return weights[b.Kind()] - weights[a.Kind()]
+	})
 
 	// return variables as a resolution problem
 	slog.Info("successfully built problem", "runtime", time.Since(start))
