@@ -10,11 +10,10 @@ import (
 	"github.com/perdasilva/olmcli/pkg/manager"
 	"github.com/sirupsen/logrus"
 	"log/slog"
-	"os"
 	"time"
 )
 
-func main() {
+func runSolver(pkgsToInstall []string, baseline []string) {
 	// create a context for the pipeline execution
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -24,12 +23,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	// get a list of package names from the command line
-	packageNames := os.Args[1:]
-	//if len(packageNames) == 0 {
-	//	log.Fatal("no package names provided")
-	//}
 
 	const ssteEnabled = false
 
@@ -42,9 +35,9 @@ func main() {
 	// The reverse dependency variable will be activated by the solver iff the original variable is activated
 	ppl := pipeline.NewPipeline(
 		// define the initial state/constraints
-		stages.RequiredPackages(packageNames...),
+		stages.RequiredPackages(pkgsToInstall...),
 		stages.SSTE(ssteEnabled),
-		stages.InstalledBundles("prometheus", "0.37.0"),
+		stages.InstalledBundles(baseline...),
 		stages.SSTE(ssteEnabled),
 		// emit bundle-variables for each bundle that provides a required-package
 		// and a constraint variable that ensures that at least bundle is selected

@@ -115,7 +115,7 @@ func (s *solver) Solve(ctx context.Context) (result []deppy.Variable, err error)
 		}
 
 		s.g.Untest()
-		slog.Info("optimizing for cardinality", "assumptions", asetNames, "extras", extrasNames, "excluded", excludedNames)
+		slog.Debug("optimizing for cardinality", "assumptions", asetNames, "extras", extrasNames, "excluded", excludedNames)
 		cs := s.litMap.CardinalityConstrainer(s.g, extras)
 		s.g.Assume(assumptions...)
 		s.g.Assume(excluded...)
@@ -127,7 +127,7 @@ func (s *solver) Solve(ctx context.Context) (result []deppy.Variable, err error)
 			if s.g.Solve() == satisfiable {
 				for _, m := range assumptions {
 					if !s.g.Value(m) {
-						slog.Info("assumption failed", "assumption", s.litMap.VariableOf(m).Identifier().String())
+						slog.Debug("assumption failed", "assumption", s.litMap.VariableOf(m).Identifier().String())
 					}
 				}
 				return s.litMap.Variables(s.g), nil

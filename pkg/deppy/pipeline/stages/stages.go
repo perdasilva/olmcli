@@ -68,15 +68,21 @@ func Pipe(stdin <-chan deppy.Variable, stdout chan<- deppy.Variable) {
 }
 
 // RequiredPackages is a pipeline stage that produces required-package variables given a list of package names
-func RequiredPackages(packageNames ...string) Stage {
+func RequiredPackages(pkgsToInstall ...string) Stage {
 	return Stage{
 		task: func(ctx context.Context, stdin <-chan deppy.Variable, stdout chan<- deppy.Variable) error {
 			// add our required package down the pipe
-			for _, packageName := range packageNames {
+			for _, request := range pkgsToInstall {
+				cmp := strings.Split(request, ":")
+				packageName := cmp[0]
+				varsionRange := ">=0.0.0"
+				if len(cmp) > 1 {
+					varsionRange = cmp[1]
+				}
 				varId := deppy.Identifier(fmt.Sprintf("required-package/%s", packageName))
 				v := variables.NewMutableVariable(varId, RequiredPackageVariableKind, map[string]interface{}{
 					RequiredPackageNameProperty:    packageName,
-					RequiredPackageVersionProperty: ">=0.0.0",
+					RequiredPackageVersionProperty: varsionRange,
 				})
 				_ = v.AddMandatory("mandatory")
 				stdout <- v
@@ -92,9 +98,13 @@ func RequiredPackages(packageNames ...string) Stage {
 func InstalledBundles(installedBundles ...string) Stage {
 	return Stage{
 		task: func(ctx context.Context, stdin <-chan deppy.Variable, stdout chan<- deppy.Variable) error {
-			for i := 0; i < len(installedBundles); i += 2 {
-				packageName := installedBundles[i]
-				version := installedBundles[i+1]
+			for _, installedBundle := range installedBundles {
+				cmp := strings.Split(installedBundle, ":")
+				if len(cmp) != 2 {
+					return fmt.Errorf("invalid installed bundle '%s'", installedBundle)
+				}
+				packageName := cmp[0]
+				version := cmp[1]
 				varId := deppy.Identifier(fmt.Sprintf("installed-package/%s", packageName))
 				v := variables.NewMutableVariable(varId, RequiredPackageVariableKind, map[string]interface{}{
 					RequiredPackageNameProperty:    packageName,
