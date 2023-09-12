@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"context"
@@ -77,7 +77,7 @@ func main() {
 	}
 	variables, _ := resolutionProblem.GetVariables()
 	for _, v := range variables {
-		slog.Info(fmt.Sprintf("%s", v))
+		slog.Debug(fmt.Sprintf("%s", v))
 	}
 	slog.Info("problem", "problem_id", resolutionProblem.ResolutionProblemID(), "runtime", time.Since(start), "variables", extractVariableIDs(variables))
 
